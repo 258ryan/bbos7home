@@ -72,3 +72,9 @@ chrome transport buttons. The BB OS 7 theme icons are shared with the launcher.
 | In the Now Playing panel | up / down = row, left / right = adjust (seek, buttons, volume), A = press |
 
 CI builds both APKs: `slate-launcher-debug` and `slate-music-debug`.
+
+## Materials
+Both apps (and the keyboard) share one skeuomorphic "materials" layer, drawn at runtime with no image assets:
+pebbled leather with stitched edges, brushed-steel bands, bevelled chrome keycaps and buttons with drop shadows,
+blue gel highlights with a gloss band and glow, recessed text fields and slider tracks, glossy navy glass banners.
+See `Materials.kt` in `app/` (Views) and `music/` (Compose).

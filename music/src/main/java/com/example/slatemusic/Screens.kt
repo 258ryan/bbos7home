@@ -29,6 +29,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -40,7 +41,7 @@ private val TAB_NAMES = listOf("Songs", "Artists", "Albums", "Now Playing")
 
 @Composable
 fun MusicApp(ui: UiState, tracks: List<Track>, hasAccess: Boolean, onRequestAccess: () -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxSize().background(Slate.Wallpaper)) {
+    BoxWithConstraints(Modifier.fillMaxSize().leather()) {
         val landscape = maxWidth > maxHeight
         SideEffect {
             ui.landscape = landscape
@@ -57,7 +58,7 @@ fun MusicApp(ui: UiState, tracks: List<Track>, hasAccess: Boolean, onRequestAcce
                     !hasAccess -> AccessScreen(onRequestAccess)
                     landscape -> Row(Modifier.fillMaxSize()) {
                         Box(Modifier.weight(0.4f).fillMaxHeight()) { Library(ui, tracks, landscape) }
-                        Box(Modifier.weight(0.6f).fillMaxHeight().background(Color(0x55000000))) { NowPlaying(ui, compact = true) }
+                        Box(Modifier.weight(0.6f).fillMaxHeight().background(Color(0x66000000)).stitched()) { NowPlaying(ui, compact = true) }
                     }
                     ui.tab == 3 -> NowPlaying(ui, compact = false)
                     else -> Library(ui, tracks, landscape)
@@ -170,7 +171,7 @@ private fun AlbumRows(ui: UiState, tracks: List<Track>) {
 @Composable
 private fun ArtWithReflection(track: Track, size: Dp) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(size).border(1.dp, Color.Black, RoundedCornerShape(3.dp))) {
+        Box(Modifier.size(size).shadow(10.dp, RoundedCornerShape(3.dp)).border(1.dp, Color.Black, RoundedCornerShape(3.dp))) {
             AlbumArt(track, Modifier.fillMaxSize(), px = 600)
             Box(
                 Modifier.fillMaxWidth().height(size * 0.45f)
@@ -282,7 +283,7 @@ private fun NowPlaying(ui: UiState, compact: Boolean) {
 
 @Composable
 private fun AlbumArtFrame(track: Track, size: Dp) {
-    Box(Modifier.size(size).border(1.dp, Color.Black, RoundedCornerShape(3.dp))) {
+    Box(Modifier.size(size).shadow(10.dp, RoundedCornerShape(3.dp)).border(1.dp, Color.Black, RoundedCornerShape(3.dp))) {
         AlbumArt(track, Modifier.fillMaxSize(), px = 600)
         Box(
             Modifier.fillMaxWidth().height(size * 0.45f)

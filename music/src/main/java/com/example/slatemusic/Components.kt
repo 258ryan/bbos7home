@@ -83,7 +83,7 @@ fun Banner(title: String, subtitle: String, compact: Boolean) {
     }
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().background(Slate.Banner).windowInsetsPadding(WindowInsets.statusBars)
+            Modifier.fillMaxWidth().glassBar().windowInsetsPadding(WindowInsets.statusBars)
                 .padding(horizontal = 14.dp, vertical = if (compact) 4.dp else 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -105,7 +105,7 @@ fun FolderStrip(names: List<String>, index: Int, onSelect: (Int) -> Unit) {
     val next = (index + 1) % n
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().background(Color(0x66000000)).padding(horizontal = 12.dp, vertical = 5.dp),
+            Modifier.fillMaxWidth().metalBand().padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Txt(names[prev], 17, Slate.Dim, modifier = Modifier.weight(1f).noIndicationClick { onSelect(prev) })
@@ -119,8 +119,8 @@ fun FolderStrip(names: List<String>, index: Int, onSelect: (Int) -> Unit) {
 @Composable
 private fun Hint(btn: String, label: String) {
     Row(Modifier.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.border(1.dp, Slate.Blue, RoundedCornerShape(10.dp)).padding(horizontal = 6.dp, vertical = 1.dp)) {
-            Txt(btn, 10, Slate.BlueLight, bold = true)
+        Box(Modifier.chrome(11.dp, dark = true).padding(start = 7.dp, end = 7.dp, top = 2.dp, bottom = 4.dp)) {
+            Txt(btn, 10, Color.White, bold = true)
         }
         Spacer(Modifier.width(4.dp))
         Txt(label, 11, Slate.Dim)
@@ -135,7 +135,7 @@ fun HintBar(ui: UiState) {
         else -> listOf("A" to "Play", "X" to "Pause", "Y" to "Search", "L1/R1" to "Folders", "L2/R2" to "Track")
     }
     Row(
-        Modifier.fillMaxWidth().background(Color(0xF0050506)).windowInsetsPadding(WindowInsets.navigationBars)
+        Modifier.fillMaxWidth().leather(0.97f).windowInsetsPadding(WindowInsets.navigationBars)
             .padding(vertical = 6.dp),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
@@ -159,13 +159,13 @@ class RowData(
 private fun SlateRow(r: RowData, selected: Boolean, active: Boolean, onClick: () -> Unit) {
     val playing = r.trackId != null && Player.state.track?.id == r.trackId
     val bg = when {
-        selected && active -> Modifier.background(Slate.Select)
-        selected -> Modifier.background(Slate.SelectDim)
-        else -> Modifier
+        selected && active -> Modifier.gel(8.dp, glow = true)
+        selected -> Modifier.gel(8.dp, dim = true)
+        else -> Modifier.bevelLines()
     }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp)
-            .clip(RoundedCornerShape(8.dp)).then(bg).noIndicationClick(onClick)
+            .then(bg).noIndicationClick(onClick)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -219,8 +219,7 @@ fun SearchBar(ui: UiState) {
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { ui.typing = false }),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).focusRequester(fr)
-            .clip(RoundedCornerShape(4.dp)).background(Color(0xCC101114))
-            .border(2.dp, Slate.Blue, RoundedCornerShape(4.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
+            .recessed(5.dp).padding(horizontal = 12.dp, vertical = 9.dp),
         decorationBox = { inner ->
             Box { if (ui.query.isEmpty()) Txt("Search songs, artists, albums", 16, Slate.Dim); inner() }
         }
@@ -230,53 +229,41 @@ fun SearchBar(ui: UiState) {
 // ───────────── controls ─────────────
 
 @Composable
-fun ChromeButton(icon: ImageVector, description: String, size: androidx.compose.ui.unit.Dp, selected: Boolean, onClick: () -> Unit) {
-    val top = if (selected) Color(0xFF4DA3F5) else Slate.ChromeHi
-    val bottom = if (selected) Color(0xFF0B5CB8) else Slate.ChromeLo
+fun ChromeButton(icon: ImageVector, description: String, size: Dp, selected: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(size).clip(CircleShape).background(Brush.verticalGradient(listOf(top, bottom)))
-            .border(if (selected) 2.dp else 1.dp, if (selected) Color(0xFFBFE0FF) else Color(0xFF9AA0A6), CircleShape)
+        Modifier.size(size)
+            .then(if (selected) Modifier.gel(size / 2, glow = true) else Modifier.chrome(size / 2))
             .noIndicationClick(onClick),
         contentAlignment = Alignment.Center
     ) {
-        // glossy top half
-        Box(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth().fillMaxHeight(0.5f).clip(CircleShape)
-                .background(Brush.verticalGradient(listOf(Color(0x55FFFFFF), Color(0x05FFFFFF))))
-        )
         Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(size * 0.5f))
     }
 }
 
 @Composable
 fun Chip(text: String, on: Boolean, selected: Boolean, onClick: () -> Unit) {
-    val bg = if (on) Slate.Select else Slate.Chrome
+    val look = if (on) Modifier.gel(14.dp) else Modifier.chrome(14.dp, dark = true)
     Box(
-        Modifier.clip(RoundedCornerShape(14.dp)).background(bg)
-            .border(if (selected) 2.dp else 1.dp, if (selected) Color(0xFFBFE0FF) else Color(0xFF80868E), RoundedCornerShape(14.dp))
-            .noIndicationClick(onClick).padding(horizontal = 14.dp, vertical = 6.dp)
+        Modifier.then(look)
+            .then(if (selected) Modifier.border(2.dp, Color(0xFFBFE0FF), RoundedCornerShape(14.dp)) else Modifier)
+            .noIndicationClick(onClick).padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 9.dp)
     ) { Txt(text, 13, bold = true) }
 }
 
 @Composable
 fun SlateSlider(value: Float, selected: Boolean, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
     BoxWithConstraints(
-        modifier.height(26.dp)
+        modifier.height(28.dp)
             .pointerInput(Unit) { detectTapGestures { o -> onChange((o.x / size.width).coerceIn(0f, 1f)) } }
             .pointerInput(Unit) { detectHorizontalDragGestures { c, _ -> onChange((c.position.x / size.width).coerceIn(0f, 1f)) } },
         contentAlignment = Alignment.CenterStart
     ) {
         val v = value.coerceIn(0f, 1f)
-        val shape = RoundedCornerShape(4.dp)
+        Box(Modifier.fillMaxWidth().height(10.dp).recessed(5.dp))
+        Box(Modifier.fillMaxWidth(v).height(10.dp).padding(1.dp).gel(4.dp))
         Box(
-            Modifier.fillMaxWidth().height(8.dp).clip(shape)
-                .background(Brush.verticalGradient(listOf(Color(0xFF050506), Color(0xFF2A2C30))))
-                .border(1.dp, if (selected) Slate.BlueLight else Color(0xFF50545A), shape)
-        )
-        Box(Modifier.fillMaxWidth(v).height(8.dp).clip(shape).background(Slate.Select))
-        Box(
-            Modifier.offset(x = (maxWidth - 20.dp) * v).size(20.dp).clip(CircleShape).background(Slate.Chrome)
-                .border(if (selected) 2.dp else 1.dp, if (selected) Slate.BlueLight else Color(0xFF9AA0A6), CircleShape)
+            Modifier.offset(x = (maxWidth - 24.dp) * v).size(24.dp).chrome(12.dp)
+                .then(if (selected) Modifier.border(2.dp, Slate.BlueLight, CircleShape) else Modifier)
         )
     }
 }
@@ -287,8 +274,7 @@ fun MiniPlayer(ui: UiState) {
     val st = Player.state
     val t = st.track ?: return
     Row(
-        Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0xFF1E4378), Color(0xFF0B1A38))))
-            .noIndicationClick { ui.select(3) }.padding(horizontal = 10.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().glassBar().noIndicationClick { ui.select(3) }.padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AlbumArt(t, Modifier.size(40.dp), px = 128)
@@ -296,6 +282,6 @@ fun MiniPlayer(ui: UiState) {
             Txt(t.title, 15, bold = true)
             Txt(t.artist, 12, Slate.Dim)
         }
-        ChromeButton(if (st.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play / Pause", 38.dp, false) { Player.togglePlay() }
+        ChromeButton(if (st.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play / Pause", 40.dp, false) { Player.togglePlay() }
     }
 }
