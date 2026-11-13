@@ -355,7 +355,13 @@ class MainActivity : Activity() {
         if (i == null) return
         val lvl = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
         val scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
-        if (lvl >= 0 && scale > 0) batteryText.text = "${lvl * 100 / scale}%"
+        if (lvl < 0 || scale <= 0) return
+        val pct = lvl * 100 / scale
+        val st = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val charging = st == BatteryManager.BATTERY_STATUS_CHARGING || st == BatteryManager.BATTERY_STATUS_FULL
+        // OS 7 shows the battery indicator only when it is low or charging.
+        batteryText.text = if (charging) "⚡ $pct%" else "$pct%"
+        batteryText.visibility = if (charging || pct <= 20) View.VISIBLE else View.INVISIBLE
     }
 
     // ───────────────────────── apps, folders, grid ─────────────────────────
