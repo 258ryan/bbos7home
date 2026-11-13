@@ -202,7 +202,7 @@ class MainActivity : Activity() {
         }
         val banner = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = bannerBackground()
+            background = bannerBackground(this@MainActivity)
         }
 
         // Header: date (left), big clock (centre), battery (right)
@@ -269,11 +269,8 @@ class MainActivity : Activity() {
             textSize = 16f
             setSingleLine(true)
             imeOptions = EditorInfo.IME_ACTION_GO or EditorInfo.IME_FLAG_NO_EXTRACT_UI
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#CC101114")); cornerRadius = dpf(4f)
-                setStroke(dp(2), Theme.BLUE)
-            }
-            setPadding(dp(12), dp(6), dp(12), dp(6))
+            background = Materials.recessed(context, 5f)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
             visibility = View.GONE
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -301,8 +298,8 @@ class MainActivity : Activity() {
         pagerNext = pagerLabel(18f, Theme.TEXT_DIM, Gravity.END or Gravity.CENTER_VERTICAL) { shiftCategory(1) }
         val strip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(12), dp(4), dp(12), dp(4))
-            setBackgroundColor(Color.parseColor("#66000000"))
+            setPadding(dp(12), dp(5), dp(12), dp(5))
+            background = Materials.metalBand(context)
             addView(pagerPrev, LinearLayout.LayoutParams(0, -2, 1f))
             addView(pagerCur, LinearLayout.LayoutParams(0, -2, 1.3f))
             addView(pagerNext, LinearLayout.LayoutParams(0, -2, 1f))
@@ -330,7 +327,7 @@ class MainActivity : Activity() {
         barScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            setBackgroundColor(Color.parseColor("#B0000000"))
+            background = Materials.stitchedLeather(context, 4)
             addView(barRow, ViewGroup.LayoutParams(-2, -2))
         }
         root.addView(barScroll, LinearLayout.LayoutParams(-1, -2))
@@ -353,7 +350,7 @@ class MainActivity : Activity() {
         hintBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#F0050506"))
+            background = Materials.dimLeather(context, 250)
             setPadding(dp(6), dp(6), dp(6), dp(6))
         }
         root.addView(hintBar, LinearLayout.LayoutParams(-1, -2))
@@ -387,20 +384,18 @@ class MainActivity : Activity() {
         barScroll.visibility = if (full) View.GONE else View.VISIBLE
         caption.visibility = if (full) View.VISIBLE else View.GONE
         homeScroll.visibility = if (full) View.VISIBLE else View.GONE
-        root.setBackgroundColor(if (full) Color.parseColor("#D8000000") else Color.TRANSPARENT)
+        if (full) root.background = Materials.dimLeather(this, 236) else root.setBackgroundColor(Color.TRANSPARENT)
         updateHints()
     }
 
     private fun hint(btn: String, label: String): View {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         row.addView(TextView(this).apply {
-            text = btn; textSize = 10f; setTextColor(Theme.BLUE_LIGHT)
+            text = btn; textSize = 10f; setTextColor(Theme.TEXT)
             setTypeface(typeface, Typeface.BOLD); gravity = Gravity.CENTER
-            minWidth = dp(20); setPadding(dp(5), dp(1), dp(5), dp(1))
-            background = GradientDrawable().apply {
-                setColor(Color.TRANSPARENT); setStroke(dp(1), Theme.BLUE)
-                cornerRadius = dpf(if (btn.length == 1) 10f else 5f)
-            }
+            setShadowLayer(2f, 0f, 1f, Color.BLACK)
+            minWidth = dp(24); setPadding(dp(7), dp(2), dp(7), dp(4))
+            background = ChromeDrawable(context, if (btn.length == 1) 11f else 6f, dark = true)
         })
         row.addView(TextView(this).apply {
             text = label; textSize = 11f; setTextColor(Theme.TEXT_DIM); setPadding(dp(5), 0, 0, 0)
@@ -1075,11 +1070,8 @@ class MainActivity : Activity() {
         d.requestWindowFeature(Window.FEATURE_NO_TITLE)
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Theme.CHROME_HI, Theme.CHROME_MID, Theme.CHROME_LO)
-            )
-            setPadding(dp(8), dp(8), dp(8), dp(12))
+            background = Materials.stitchedLeather(context, 5)
+            setPadding(dp(12), dp(12), dp(12), dp(16))
         }
         box.addView(TextView(this).apply {
             text = title; textSize = 13f; setTextColor(Theme.BLUE_LIGHT)

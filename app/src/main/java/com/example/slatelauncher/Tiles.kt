@@ -145,8 +145,8 @@ class HubRow(
         gravity = Gravity.CENTER_VERTICAL
         isFocusable = true
         isClickable = true
-        background = focusGlow(ctx, 8, 1)
-        setPadding(ctx.dp(10), ctx.dp(8), ctx.dp(10), ctx.dp(8))
+        background = cardBackground(ctx)
+        setPadding(ctx.dp(12), ctx.dp(10), ctx.dp(12), ctx.dp(10))
         addView(ImageView(ctx).apply {
             if (icon != null) setImageDrawable(icon)
             scaleType = ImageView.ScaleType.FIT_CENTER

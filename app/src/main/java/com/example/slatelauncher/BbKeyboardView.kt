@@ -54,22 +54,14 @@ class BbKeyboardView(ctx: Context) : View(ctx) {
         setShadowLayer(2f, 0f, 1f, Color.BLACK)
     }
 
-    private fun keyShape(top: Int, bottom: Int) =
-        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(top, bottom)).apply {
-            cornerRadius = context.dpf(6f)
-            setStroke(1, Color.parseColor("#80868E"))
-        }
-
-    private val keyNormal = keyShape(Color.parseColor("#5B5F66"), Color.parseColor("#1E2023"))
-    private val keySpecial = keyShape(Color.parseColor("#3C3F44"), Color.parseColor("#141517"))
-    private val keyFocus = GradientDrawable(
-        GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(Color.parseColor("#4DA3F5"), Color.parseColor("#1668C6"))
-    ).apply { cornerRadius = context.dpf(6f); setStroke(context.dp(2), Color.parseColor("#BFE0FF")) }
-    private val gloss = GradientDrawable(
-        GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(Color.parseColor("#55FFFFFF"), Color.parseColor("#05FFFFFF"))
-    ).apply { cornerRadius = context.dpf(6f) }
+    private val keyNormal = ChromeDrawable(context, 6f)
+    private val keySpecial = ChromeDrawable(context, 6f, dark = true)
+    private val keyFocus = GelDrawable(context, Color.parseColor("#4DA3F5"), Color.parseColor("#1668C6"), 6f, glow = true)
+    private val gloss = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)   // gloss is part of the key drawables now
+    private val metalPaint = Paint().apply {
+        shader = android.graphics.BitmapShader(Materials.brushed(), android.graphics.Shader.TileMode.REPEAT, android.graphics.Shader.TileMode.REPEAT)
+        alpha = 150
+    }
 
     init { isFocusable = false; rebuild() }
 
@@ -237,6 +229,7 @@ class BbKeyboardView(ctx: Context) : View(ctx) {
             0f, 0f, 0f, height.toFloat(), Color.parseColor("#26292E"), Color.parseColor("#08090A"), android.graphics.Shader.TileMode.CLAMP
         )
         c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+        c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), metalPaint)
         c.drawLine(0f, 0f, width.toFloat(), 0f, linePaint)
 
         // Suggestion strip
