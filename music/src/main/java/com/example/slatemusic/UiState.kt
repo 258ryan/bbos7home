@@ -28,6 +28,7 @@ class UiState {
     var prow by mutableStateOf(1)     // panel row: 0 scrubber, 1 transport, 2 shuffle/repeat, 3 volume
     var pcol by mutableStateOf(1)     // transport column 0..2
     var pcol2 by mutableStateOf(0)    // shuffle / repeat
+    var pulse by mutableStateOf(0)    // bumps when A presses a control in the panel (drives the button squash)
     var landscape = false
     var tabCount = 4
     var listSize = 0
@@ -85,6 +86,7 @@ class UiState {
 
     fun activate() {
         if (!panelActive()) { onActivate(sel); return }
+        pulse++
         when (prow) {
             0 -> Player.togglePlay()
             1 -> when (pcol) { 0 -> Player.prev(); 1 -> Player.togglePlay(); else -> Player.next(false) }

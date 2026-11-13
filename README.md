@@ -95,6 +95,12 @@ chrome transport buttons. The BB OS 7 theme icons are shared with the launcher.
 
 CI builds both APKs: `slate-launcher-debug` and `slate-music-debug`.
 
+## Slate Music: Refined iOS 6 pass
+Cover art lies on a stitched leather mat with a soft drop shadow; the scrubber and volume knobs are glossy metal balls;
+selection fades in with a gel highlight and a slight spring; transport buttons pop and squash (also when pressed with A);
+tracks change with a slide-and-fade; the folder name slides; the mini player slides up; pages fade in; progress glides.
+Animations follow Android's animator duration scale (0 = off).
+
 ## Materials
 Both apps (and the keyboard) share one skeuomorphic "materials" layer, drawn at runtime with no image assets:
 pebbled leather with stitched edges, brushed-steel bands, bevelled chrome keycaps and buttons with drop shadows,

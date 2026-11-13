@@ -105,14 +105,14 @@ fun Modifier.bevelLines(): Modifier = drawBehind {
 }
 
 /** Blue gel: gradient, glossy top half, dark outline, light inner edge, optional glow. [dim] = unfocused selection. */
-fun Modifier.gel(radius: Dp, glow: Boolean = false, dim: Boolean = false): Modifier = drawBehind {
+fun Modifier.gel(radius: Dp, glow: Boolean = false, dim: Boolean = false, alpha: Float = 1f): Modifier = drawBehind {
     val r = radius.toPx()
     val d = 1.dp.toPx()
-    val a = if (dim) 0.45f else 1f
-    if (glow) for (i in 3 downTo 1) {
+    val a = (if (dim) 0.45f else 1f) * alpha
+    if (glow && alpha > 0.05f) for (i in 3 downTo 1) {
         val gi = i * d * 1.6f
         drawRoundRect(
-            color = Color(0x1A78BEFF), topLeft = Offset(-gi, -gi),
+            color = Color(0x1A78BEFF).copy(alpha = 0.1f * alpha), topLeft = Offset(-gi, -gi),
             size = Size(size.width + 2 * gi, size.height + 2 * gi), cornerRadius = CornerRadius(r + gi)
         )
     }
@@ -176,5 +176,40 @@ fun Modifier.recessed(radius: Dp): Modifier = drawBehind {
     drawRoundRect(
         color = Color(0xFF55585E), topLeft = Offset(0.5f * d, 0.5f * d),
         size = Size(size.width - d, size.height - 2 * d), cornerRadius = CornerRadius(r), style = Stroke(d)
+    )
+}
+
+/** Soft layered drop shadow around a rounded box (drawn outside its bounds). */
+fun Modifier.dropShadow(radius: Dp, spread: Dp = 8.dp, dy: Dp = 4.dp): Modifier = drawBehind {
+    val r = radius.toPx()
+    val sp = spread.toPx()
+    val off = dy.toPx()
+    for (i in 6 downTo 1) {
+        val g = sp * i / 6f
+        drawRoundRect(
+            color = Color(0x1E000000), topLeft = Offset(-g, -g + off),
+            size = Size(size.width + 2 * g, size.height + 2 * g), cornerRadius = CornerRadius(r + g)
+        )
+    }
+}
+
+/** Glossy metal ball (slider knob): shadow, radial shading, rim, specular highlight. */
+fun Modifier.chromeKnob(): Modifier = drawBehind {
+    val d = 1.dp.toPx()
+    val r = size.minDimension / 2f - 2 * d
+    val c = Offset(size.width / 2f, size.height / 2f - d)
+    for (i in 3 downTo 1) drawCircle(color = Color(0x28000000), radius = r, center = Offset(c.x, c.y + i * d * 0.9f))
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color(0xFFF2F4F7), Color(0xFF9CA2AA), Color(0xFF3A3D42), Color(0xFF111214)),
+            center = Offset(c.x - r * 0.3f, c.y - r * 0.4f), radius = r * 1.6f
+        ),
+        radius = r, center = c
+    )
+    drawCircle(color = Color(0xFF08090A), radius = r, center = c, style = Stroke(d))
+    drawCircle(color = Color(0x55FFFFFF), radius = r - 1.5f * d, center = c, style = Stroke(d))
+    drawOval(
+        brush = Brush.verticalGradient(listOf(Color(0xCCFFFFFF), Color(0x00FFFFFF)), startY = c.y - r, endY = c.y),
+        topLeft = Offset(c.x - r * 0.55f, c.y - r * 0.9f), size = Size(r * 1.1f, r * 0.8f)
     )
 }

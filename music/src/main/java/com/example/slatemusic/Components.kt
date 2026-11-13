@@ -1,5 +1,20 @@
 package com.example.slatemusic
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -111,7 +126,14 @@ fun FolderStrip(names: List<String>, index: Int, onSelect: (Int) -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Txt(names[prev], 17, Slate.Dim, modifier = Modifier.weight(1f).noIndicationClick { onSelect(prev) })
-            Txt(names[index], 22, align = TextAlign.Center, modifier = Modifier.weight(1.3f))
+            AnimatedContent(
+                targetState = index,
+                transitionSpec = {
+                    (slideInHorizontally(tween(220)) { it / 3 } + fadeIn(tween(220))) togetherWith
+                        (slideOutHorizontally(tween(180)) { -it / 3 } + fadeOut(tween(120)))
+                },
+                modifier = Modifier.weight(1.3f), label = "folder"
+            ) { i -> Txt(names[i], 22, align = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
             Txt(names[next], 17, Slate.Dim, align = TextAlign.End, modifier = Modifier.weight(1f).noIndicationClick { onSelect(next) })
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Slate.Hairline))
@@ -160,26 +182,26 @@ class RowData(
 @Composable
 private fun SlateRow(r: RowData, selected: Boolean, active: Boolean, onClick: () -> Unit) {
     val playing = r.trackId != null && Player.state.track?.id == r.trackId
-    val bg = when {
-        selected && active -> Modifier.gel(8.dp, glow = true)
-        selected -> Modifier.gel(8.dp, dim = true)
-        else -> Modifier.bevelLines()
-    }
+    val sel by animateFloatAsState(if (selected) 1f else 0f, tween(150), label = "sel")
+    val lift by animateFloatAsState(if (selected && active) 1f else 0f, spring(dampingRatio = 0.55f, stiffness = 500f), label = "lift")
+    val bg = if (sel > 0.01f) Modifier.gel(8.dp, glow = active, dim = !active, alpha = sel) else Modifier.bevelLines()
+    val hi = selected && active
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp)
+            .graphicsLayer { scaleX = 1f + 0.015f * lift; scaleY = 1f + 0.015f * lift }
             .then(bg).noIndicationClick(onClick)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         when {
-            r.track != null -> AlbumArt(r.track, Modifier.size(46.dp), px = 128)
+            r.track != null -> AlbumArt(r.track, Modifier.size(46.dp).dropShadow(3.dp, 4.dp, 2.dp), px = 128)
             r.icon != null -> BbIcon(r.icon, 46.dp)
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Txt(r.title, 16, bold = true)
-            if (r.subtitle != null) Txt(r.subtitle, 13, if (selected && active) Color(0xFFD6ECFF) else Slate.Dim)
+            if (r.subtitle != null) Txt(r.subtitle, 13, if (hi) Color(0xFFD6ECFF) else Slate.Dim)
         }
-        if (r.detail != null) Txt(r.detail, 13, if (selected && active) Color(0xFFD6ECFF) else Slate.Dim)
+        if (r.detail != null) Txt(r.detail, 13, if (hi) Color(0xFFD6ECFF) else Slate.Dim)
         if (playing) BbIcon("sound", 24.dp, Modifier.padding(start = 8.dp))
     }
 }
@@ -231,11 +253,21 @@ fun SearchBar(ui: UiState) {
 // ───────────── controls ─────────────
 
 @Composable
-fun ChromeButton(icon: Painter, description: String, size: Dp, selected: Boolean, onClick: () -> Unit) {
+fun ChromeButton(icon: Painter, description: String, size: Dp, selected: Boolean, pulse: Int = 0, onClick: () -> Unit) {
+    var pressed by remember { mutableStateOf(false) }
+    val base by animateFloatAsState(
+        when { pressed -> 0.92f; selected -> 1.1f; else -> 1f },
+        spring(dampingRatio = 0.5f, stiffness = 500f), label = "btn"
+    )
+    val squash = remember { Animatable(1f) }
+    LaunchedEffect(pulse) {
+        if (selected && pulse > 0) { squash.animateTo(0.9f, tween(60)); squash.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 500f)) }
+    }
     Box(
         Modifier.size(size)
+            .graphicsLayer { scaleX = base * squash.value; scaleY = base * squash.value }
             .then(if (selected) Modifier.gel(size / 2, glow = true) else Modifier.chrome(size / 2))
-            .noIndicationClick(onClick),
+            .pointerInput(Unit) { detectTapGestures(onPress = { pressed = true; tryAwaitRelease(); pressed = false }, onTap = { onClick() }) },
         contentAlignment = Alignment.Center
     ) {
         Icon(painter = icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(size * 0.5f))
@@ -255,7 +287,7 @@ fun Chip(text: String, on: Boolean, selected: Boolean, onClick: () -> Unit) {
 @Composable
 fun SlateSlider(value: Float, selected: Boolean, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
     BoxWithConstraints(
-        modifier.height(28.dp)
+        modifier.height(30.dp)
             .pointerInput(Unit) { detectTapGestures { o -> onChange((o.x / size.width).coerceIn(0f, 1f)) } }
             .pointerInput(Unit) { detectHorizontalDragGestures { c, _ -> onChange((c.position.x / size.width).coerceIn(0f, 1f)) } },
         contentAlignment = Alignment.CenterStart
@@ -264,7 +296,7 @@ fun SlateSlider(value: Float, selected: Boolean, onChange: (Float) -> Unit, modi
         Box(Modifier.fillMaxWidth().height(10.dp).recessed(5.dp))
         Box(Modifier.fillMaxWidth(v).height(10.dp).padding(1.dp).gel(4.dp))
         Box(
-            Modifier.offset(x = (maxWidth - 24.dp) * v).size(24.dp).chrome(12.dp)
+            Modifier.offset(x = (maxWidth - 28.dp) * v).size(28.dp).chromeKnob()
                 .then(if (selected) Modifier.border(2.dp, Slate.BlueLight, CircleShape) else Modifier)
         )
     }

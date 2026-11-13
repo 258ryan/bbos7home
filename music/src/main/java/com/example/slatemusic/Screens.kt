@@ -1,5 +1,20 @@
 package com.example.slatemusic
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +44,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -53,8 +69,14 @@ fun MusicApp(ui: UiState, tracks: List<Track>, hasAccess: Boolean, onRequestAcce
         val (title, subtitle) = headerFor(ui, tracks)
         Column(Modifier.fillMaxSize()) {
             Banner(title, subtitle, compact = landscape)
+            Box(Modifier.fillMaxWidth().height(5.dp).background(Brush.verticalGradient(listOf(Color(0x66000000), Color.Transparent))))
             FolderStrip(names, ui.tab.coerceIn(0, names.size - 1)) { ui.select(it) }
+            Box(Modifier.fillMaxWidth().height(5.dp).background(Brush.verticalGradient(listOf(Color(0x66000000), Color.Transparent))))
             Box(Modifier.weight(1f).fillMaxWidth()) {
+              key(ui.tab, ui.detail) {
+                val fade = remember { Animatable(0f) }
+                LaunchedEffect(Unit) { fade.animateTo(1f, tween(200)) }
+                Box(Modifier.fillMaxSize().graphicsLayer { alpha = fade.value }) {
                 when {
                     !hasAccess -> AccessScreen(onRequestAccess)
                     landscape -> Row(Modifier.fillMaxSize()) {
@@ -64,8 +86,14 @@ fun MusicApp(ui: UiState, tracks: List<Track>, hasAccess: Boolean, onRequestAcce
                     ui.tab == 3 -> NowPlaying(ui, compact = false)
                     else -> Library(ui, tracks, landscape)
                 }
+                }
+              }
             }
-            if (!landscape && ui.tab != 3) MiniPlayer(ui)
+            AnimatedVisibility(
+                visible = !landscape && ui.tab != 3 && Player.state.track != null,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut()
+            ) { MiniPlayer(ui) }
             HintBar(ui)
         }
     }
@@ -169,19 +197,29 @@ private fun AlbumRows(ui: UiState, tracks: List<Track>) {
 
 // ───────────── Now Playing ─────────────
 
+/** Cover art lying on a stitched leather mat with a soft shadow. */
+@Composable
+private fun LeatherMat(size: Dp, content: @Composable () -> Unit) {
+    Box(
+        Modifier.size(size + 28.dp).dropShadow(8.dp, 10.dp, 5.dp).clip(RoundedCornerShape(8.dp)).leather().stitched(5.dp).padding(14.dp)
+    ) { content() }
+}
+
 @Composable
 private fun ArtWithReflection(track: Track, size: Dp) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(size).shadow(10.dp, RoundedCornerShape(3.dp)).border(1.dp, Color.Black, RoundedCornerShape(3.dp))) {
-            AlbumArt(track, Modifier.fillMaxSize(), px = 600)
-            Box(
-                Modifier.fillMaxWidth().height(size * 0.45f)
-                    .background(Brush.verticalGradient(listOf(Color(0x44FFFFFF), Color(0x05FFFFFF))))
-            )
+        LeatherMat(size) {
+            Box(Modifier.size(size).shadow(6.dp, RoundedCornerShape(3.dp)).border(1.dp, Color.Black, RoundedCornerShape(3.dp))) {
+                AlbumArt(track, Modifier.fillMaxSize(), px = 600)
+                Box(
+                    Modifier.fillMaxWidth().height(size * 0.45f)
+                        .background(Brush.verticalGradient(listOf(Color(0x44FFFFFF), Color(0x05FFFFFF))))
+                )
+            }
         }
-        Box(Modifier.width(size).height(size * 0.28f)) {
+        Box(Modifier.width(size).height(size * 0.22f)) {
             AlbumArt(
-                track, Modifier.fillMaxSize().graphicsLayer { scaleY = -1f; alpha = 0.45f },
+                track, Modifier.fillMaxSize().graphicsLayer { scaleY = -1f; alpha = 0.4f },
                 px = 600, alignment = Alignment.BottomCenter
             )
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x00000000), Color(0xFF17191D)))))
@@ -196,6 +234,7 @@ private fun Controls(ui: UiState, compact: Boolean, modifier: Modifier = Modifie
     val active = ui.panelActive()
     val dur = st.durationMs
     val pos = st.positionMs
+    val progress by animateFloatAsState(if (dur > 0) pos.toFloat() / dur else 0f, tween(450, easing = LinearEasing), label = "progress")
     val big = if (compact) 56.dp else 68.dp
     val small = if (compact) 44.dp else 52.dp
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -207,7 +246,7 @@ private fun Controls(ui: UiState, compact: Boolean, modifier: Modifier = Modifie
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Txt(fmt(pos.toLong()), 12, Color(0xFFB8BEC6), modifier = Modifier.width(42.dp))
             SlateSlider(
-                value = if (dur > 0) pos.toFloat() / dur else 0f, selected = active && ui.prow == 0,
+                value = progress, selected = active && ui.prow == 0,
                 onChange = { Player.seekTo((it * dur).toInt()) }, modifier = Modifier.weight(1f)
             )
             Txt("-" + fmt((dur - pos).toLong()), 12, Color(0xFFB8BEC6), align = TextAlign.End, modifier = Modifier.width(46.dp))
@@ -215,12 +254,12 @@ private fun Controls(ui: UiState, compact: Boolean, modifier: Modifier = Modifie
         Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (compact) 16.dp else 22.dp)) {
-            ChromeButton(painterResource(R.drawable.ic_prev), "Previous", small, active && ui.prow == 1 && ui.pcol == 0) { Player.prev() }
+            ChromeButton(painterResource(R.drawable.ic_prev), "Previous", small, active && ui.prow == 1 && ui.pcol == 0, ui.pulse) { Player.prev() }
             ChromeButton(
                 painterResource(if (st.playing) R.drawable.ic_pause else R.drawable.ic_play), "Play / Pause", big,
-                active && ui.prow == 1 && ui.pcol == 1
+                active && ui.prow == 1 && ui.pcol == 1, ui.pulse
             ) { Player.togglePlay() }
-            ChromeButton(painterResource(R.drawable.ic_next), "Next", small, active && ui.prow == 1 && ui.pcol == 2) { Player.next(false) }
+            ChromeButton(painterResource(R.drawable.ic_next), "Next", small, active && ui.prow == 1 && ui.pcol == 2, ui.pulse) { Player.next(false) }
         }
         Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
 
@@ -260,21 +299,33 @@ private fun NowPlaying(ui: UiState, compact: Boolean) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         if (compact) {
             // Landscape panel: art on the left, controls on the right, no reflection (height is tight).
-            val art = minOf(maxHeight - 16.dp, maxWidth * 0.34f)
+            val art = minOf(maxHeight - 44.dp, maxWidth * 0.34f - 28.dp)
             Row(
                 Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                AlbumArtFrame(t, art)
+                AnimatedContent(
+                    targetState = t,
+                    transitionSpec = {
+                        (slideInHorizontally(tween(260)) { it / 6 } + fadeIn(tween(260))) togetherWith
+                            (slideOutHorizontally(tween(200)) { -it / 6 } + fadeOut(tween(160)))
+                    }, label = "art"
+                ) { tr -> AlbumArtFrame(tr, art) }
                 Controls(ui, compact = true, modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()))
             }
         } else {
-            val art = minOf(maxWidth - 48.dp, maxHeight * 0.36f)
+            val art = minOf(maxWidth - 76.dp, maxHeight * 0.30f)
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                ArtWithReflection(t, art)
+                AnimatedContent(
+                    targetState = t,
+                    transitionSpec = {
+                        (slideInHorizontally(tween(260)) { it / 6 } + fadeIn(tween(260))) togetherWith
+                            (slideOutHorizontally(tween(200)) { -it / 6 } + fadeOut(tween(160)))
+                    }, label = "art"
+                ) { tr -> ArtWithReflection(tr, art) }
                 Spacer(Modifier.height(8.dp))
                 Controls(ui, compact = false, modifier = Modifier.fillMaxWidth())
             }
@@ -284,11 +335,13 @@ private fun NowPlaying(ui: UiState, compact: Boolean) {
 
 @Composable
 private fun AlbumArtFrame(track: Track, size: Dp) {
-    Box(Modifier.size(size).shadow(10.dp, RoundedCornerShape(3.dp)).border(1.dp, Color.Black, RoundedCornerShape(3.dp))) {
-        AlbumArt(track, Modifier.fillMaxSize(), px = 600)
-        Box(
-            Modifier.fillMaxWidth().height(size * 0.45f)
-                .background(Brush.verticalGradient(listOf(Color(0x44FFFFFF), Color(0x05FFFFFF))))
-        )
+    LeatherMat(size) {
+        Box(Modifier.size(size).shadow(6.dp, RoundedCornerShape(3.dp)).border(1.dp, Color.Black, RoundedCornerShape(3.dp))) {
+            AlbumArt(track, Modifier.fillMaxSize(), px = 600)
+            Box(
+                Modifier.fillMaxWidth().height(size * 0.45f)
+                    .background(Brush.verticalGradient(listOf(Color(0x44FFFFFF), Color(0x05FFFFFF))))
+            )
+        }
     }
 }
