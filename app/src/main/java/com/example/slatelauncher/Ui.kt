@@ -2,6 +2,7 @@ package com.example.slatelauncher
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
@@ -29,33 +30,28 @@ fun wallpaper(): Drawable = GradientDrawable(
     intArrayOf(Color.parseColor("#3A3E45"), Color.parseColor("#17191D"), Color.parseColor("#050506"))
 )
 
-/** Glossy dark rounded plate that sits behind every icon. */
-fun iconPlate(ctx: Context): Drawable {
-    val r = ctx.dpf(12f)
-    val base = GradientDrawable(
-        GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(Theme.CHROME_HI, Theme.CHROME_MID, Theme.CHROME_LO)
-    ).apply { cornerRadius = r; setStroke(ctx.dp(1), Color.parseColor("#80868E")) }
-    val gloss = GradientDrawable(
-        GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(Color.parseColor("#55FFFFFF"), Color.parseColor("#05FFFFFF"))
-    ).apply { cornerRadius = r }
-    return LayerDrawable(arrayOf(base, gloss))
-}
+/** Glossy bevelled chrome plate that sits behind every icon. */
+fun iconPlate(ctx: Context): Drawable = ChromeDrawable(ctx, 12f)
 
-/** Solid blue rounded "selected item" square, like OS 7. */
+/** Blue gel "selected item" highlight (gloss + glow), shown while a tile / chip / row has focus. */
 fun focusGlow(ctx: Context, radiusDp: Int = 6, insetDp: Int = 2): Drawable {
-    val glow = GradientDrawable(
-        GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(Color.parseColor("#3C9AF0"), Color.parseColor("#1668C6"))
-    ).apply { cornerRadius = ctx.dpf(radiusDp.toFloat()) }
-    val none = GradientDrawable().apply { setColor(Color.TRANSPARENT) }
+    val gel = GelDrawable(ctx, 0xFF4DA3F5.toInt(), 0xFF1668C6.toInt(), radiusDp.toFloat(), glow = true)
     val sl = StateListDrawable().apply {
-        addState(intArrayOf(android.R.attr.state_focused), glow)
-        addState(intArrayOf(android.R.attr.state_pressed), glow)
-        addState(intArrayOf(), none)
+        addState(intArrayOf(android.R.attr.state_focused), gel)
+        addState(intArrayOf(android.R.attr.state_pressed), gel)
+        addState(intArrayOf(), ColorDrawable(Color.TRANSPARENT))
     }
     return InsetDrawable(sl, ctx.dp(insetDp))
+}
+
+/** Card for list rows: stitched leather at rest, blue gel when focused. */
+fun cardBackground(ctx: Context): Drawable {
+    val gel = GelDrawable(ctx, 0xFF4DA3F5.toInt(), 0xFF1668C6.toInt(), 8f, glow = true)
+    return StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_focused), gel)
+        addState(intArrayOf(android.R.attr.state_pressed), gel)
+        addState(intArrayOf(), Materials.stitchedLeather(ctx, 3))
+    }
 }
 
 fun selectedPill(ctx: Context): Drawable = GradientDrawable(
@@ -63,8 +59,5 @@ fun selectedPill(ctx: Context): Drawable = GradientDrawable(
     intArrayOf(Theme.BLUE_LIGHT, Theme.BLUE, Theme.BLUE_DARK)
 ).apply { cornerRadius = ctx.dpf(14f) }
 
-/** Solid navy banner block (date, clock, counters), as on OS 7. */
-fun bannerBackground(): Drawable = GradientDrawable(
-    GradientDrawable.Orientation.TOP_BOTTOM,
-    intArrayOf(Color.parseColor("#F0183663"), Color.parseColor("#F00B1A38"))
-)
+/** Navy glass banner block (date, clock, counters), as on OS 7. */
+fun bannerBackground(ctx: Context): Drawable = GlassBarDrawable(ctx)
