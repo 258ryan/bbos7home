@@ -373,7 +373,7 @@ private fun NowPlayingControls(modifier: Modifier = Modifier) {
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.VolumeMute, null, tint = Color(0xFFB8BEC6), modifier = Modifier.size(20.dp))
-            IosSlider(value = Player.volume, onValueChange = { Player.setVolume(it) }, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
+            IosSlider(value = Player.volume, onValueChange = { Player.changeVolume(it) }, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
             Icon(Icons.Filled.VolumeUp, null, tint = Color(0xFFB8BEC6), modifier = Modifier.size(20.dp))
         }
     }

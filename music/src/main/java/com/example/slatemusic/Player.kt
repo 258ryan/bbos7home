@@ -167,7 +167,7 @@ object Player {
         volume = a.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / a.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
     }
 
-    fun setVolume(f: Float) {
+    fun changeVolume(f: Float) {
         val a = audio()
         val max = a.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         a.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(f.coerceIn(0f, 1f) * max), 0)
