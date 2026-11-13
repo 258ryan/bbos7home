@@ -49,21 +49,26 @@ Install the APK, press Home, choose **Slate Launcher** → Always. For the notif
 the prompt in the top row and grant notification access.
 
 ## Slate Music (standalone app, `music/`)
-A separate skeuomorphic music player (iOS 6 / BB OS 7 look: black nav bars, pinstripe lists, linen Now Playing
-screen with glossy art + reflection, chrome transport buttons). Uses the vendored
-[Pwnapple](third_party/pwnapple/NOTICE.md) component kit (MIT).
+A separate music player in the same BB OS 7 look as Slate Home: navy banner with the clock, folder strip
+(Songs / Artists / Albums / Now Playing), solid-blue selection, button-hint bar, glossy art with reflection and
+chrome transport buttons. The BB OS 7 theme icons are shared with the launcher.
 
-Songs / Artists / Albums / Now Playing, search, shuffle / repeat, background playback with a media notification.
+* **Landscape** is a split screen: library on the left, a permanent Now Playing panel on the right.
+* **Portrait** uses folders plus a mini player; Now Playing is its own folder.
+* Search, shuffle / repeat, background playback with a media notification.
+* Selection is tracked by the app itself, so the highlight is always visible with a D-pad.
 
 | Button | Action |
 |---|---|
-| A / B | Select / back |
+| D-pad | Move selection (landscape: right = into the Now Playing panel, left / B = back to the list) |
+| A | Play / activate |
+| B | Back |
 | X | Play / pause |
-| Y | Shuffle |
-| Select | Repeat |
-| L1 / R1 | Previous / next track |
-| L2 / R2 | Previous / next tab |
-| Start | Jump to / from Now Playing |
-| D-pad on Now Playing | left / right = seek 10 s, up / down = volume |
+| Y | Search (use Slate Keyboard or any keyboard) |
+| Select | Shuffle |
+| L1 / R1 | Previous / next folder |
+| L2 / R2 | Previous / next track |
+| Start | Now Playing |
+| In the Now Playing panel | up / down = row, left / right = adjust (seek, buttons, volume), A = press |
 
 CI builds both APKs: `slate-launcher-debug` and `slate-music-debug`.
