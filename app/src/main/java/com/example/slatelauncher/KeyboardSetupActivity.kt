@@ -49,6 +49,12 @@ class KeyboardSetupActivity : Activity() {
             hint = "Type here"; setTextColor(Color.WHITE); setHintTextColor(Theme.TEXT_DIM)
         }, LinearLayout.LayoutParams(-1, -2))
         col.addView(CheckBox(this).apply {
+            text = "Show the keyboard automatically when a text field is selected"
+            setTextColor(Color.WHITE)
+            isChecked = prefs.getBoolean("auto_show", true)
+            setOnCheckedChangeListener { _, v -> prefs.edit().putBoolean("auto_show", v).apply() }
+        })
+        col.addView(CheckBox(this).apply {
             text = "B button = backspace even when the device sends it as Back"
             setTextColor(Color.WHITE)
             isChecked = prefs.getBoolean("b_delete", true)

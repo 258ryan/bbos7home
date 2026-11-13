@@ -1,6 +1,8 @@
 package com.example.slatelauncher
 
 import android.inputmethodservice.InputMethodService
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.text.InputType
 import android.view.InputDevice
@@ -25,6 +27,7 @@ class BbKeyboardService : InputMethodService(), BbKeyboardView.Listener {
     private var enterAction = EditorInfo.IME_ACTION_NONE
     private var words: List<String> = emptyList()
     private val swallowed = HashSet<Int>()
+    private val handler = Handler(Looper.getMainLooper())
     private val prefs by lazy { getSharedPreferences("bbkb", MODE_PRIVATE) }
 
     override fun onCreate() {
@@ -42,8 +45,20 @@ class BbKeyboardService : InputMethodService(), BbKeyboardView.Listener {
         return kb
     }
 
-    // Show even when a hardware keyboard / gamepad is connected.
+    // Gamepads often register as a hardware keyboard, and Android then refuses to show an IME for an
+    // implicit request. Always allow it, and never switch to the fullscreen "extract" editor.
     override fun onEvaluateInputViewShown(): Boolean { super.onEvaluateInputViewShown(); return true }
+    override fun onShowInputRequested(flags: Int, configChange: Boolean): Boolean = true
+    override fun onEvaluateFullscreenMode(): Boolean = false
+
+    // D-pad focus on a text field does not always ask for the keyboard, so show it when an editor starts.
+    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        if (restarting || attribute == null) return
+        if ((attribute.inputType and InputType.TYPE_MASK_CLASS) == 0) return
+        if (!prefs.getBoolean("auto_show", true)) return
+        handler.postDelayed({ requestShowSelf(0) }, 80)
+    }
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
