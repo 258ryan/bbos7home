@@ -271,6 +271,7 @@ class MainActivity : Activity() {
         banner.addView(counters, LinearLayout.LayoutParams(-1, -2))
         root.addView(banner, LinearLayout.LayoutParams(-1, -2))
         addHairline(root)
+        root.addView(View(this).apply { background = Materials.shadowStrip() }, LinearLayout.LayoutParams(-1, dp(5)))
 
         // Search bar (hidden until used)
         searchBar = EditText(this).apply {
@@ -316,6 +317,7 @@ class MainActivity : Activity() {
         }
         root.addView(strip, LinearLayout.LayoutParams(-1, -2))
         addHairline(root)
+        root.addView(View(this).apply { background = Materials.shadowStrip() }, LinearLayout.LayoutParams(-1, dp(5)))
 
         // Name of the focused icon (expanded view only; collapsed uses captionFloat above the strip)
         caption = TextView(this).apply {
@@ -556,9 +558,12 @@ class MainActivity : Activity() {
     private fun makeTile(e: AppEntry, bar: Boolean = false): IconTile {
         val t = if (bar) IconTile(this, e, (barCellDp * 0.62f).toInt(), showLabel = Prefs.bool(this, Prefs.BAR_LABELS, true))
         else IconTile(this, e, (cellDp * 0.8f).toInt())
-        t.setOnClickListener { launch(e) }
+        t.setOnClickListener { launch(e, it) }
         t.setOnLongClickListener { showOptions(e); true }
-        t.setOnFocusChangeListener { _, has -> if (has) { caption.text = e.label; captionFloat.text = e.label } }
+        t.setOnFocusChangeListener { v, has ->
+            Anim.focusPop(v, has, if (bar) 1.08f else 1.12f)
+            if (has) { caption.text = e.label; captionFloat.text = e.label }
+        }
         return t
     }
 
@@ -591,6 +596,7 @@ class MainActivity : Activity() {
 
     private fun rebuildGrid() {
         if (!::root.isInitialized) return
+        homeScroll.background = if (category == Category.GAMES && !searching) Materials.feltPanel(this) else null
         val focus = currentFocus
         val wasGrid = focus == null || focus is IconTile || focus is WidgetFrame || focus is HubRow ||
             focus is QuickTile || focus is CoverTile || focus?.tag == "addwidget" || focus?.tag == "gamecat"
@@ -631,7 +637,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun setCategory(c: Category) {
+    private fun setCategory(c: Category, dir: Int = 0) {
         category = c
         updatePager()
         applyMode()
@@ -639,6 +645,16 @@ class MainActivity : Activity() {
         barScroll.scrollTo(0, 0)
         rebuildGrid()
         focusFirst()
+        if (dir != 0) Anim.slideIn(pagerCur, dir * 40f, 0f, 200)
+        Anim.slideIn(if (isFull()) homeScroll else barScroll, dir * 36f, 0f, 220)
+        staggerContent()
+    }
+
+    /** Items of the current folder rise in one after another (full animations only). */
+    private fun staggerContent() {
+        if (!isFull()) { Anim.stagger(barRow, 10, horizontal = true); return }
+        for (i in 0 until gridHost.childCount) { val c = gridHost.getChildAt(i); if (c is TileGrid) Anim.stagger(c, 18) }
+        if (isPanel()) Anim.stagger(gridHost, 10)
     }
 
     private fun focusFirst() {
@@ -653,6 +669,8 @@ class MainActivity : Activity() {
         rebuildGrid()
         homeScroll.scrollTo(0, 0)
         barScroll.scrollTo(0, 0)
+        if (v) Anim.slideIn(homeScroll, 0f, 70f, 280) else Anim.slideIn(barScroll, 0f, 40f, 240)
+        staggerContent()
     }
 
     // ───────────────────────── Games page ─────────────────────────
@@ -662,7 +680,8 @@ class MainActivity : Activity() {
     private var gameCat = "recent"
     private val gameCatRows = ArrayList<TextView>()
     private lateinit var gameGrid: TileGrid
-    private lateinit var gameInfo: TextView
+    private lateinit var gameTitle: TextView
+    private lateinit var gameMeta: TextView
 
     private fun refreshGameList() {
         gameList = Games.androidGames(this, apps) + (romCache ?: emptyList())
@@ -715,8 +734,26 @@ class MainActivity : Activity() {
         if (cats.none { it.first == gameCat }) gameCat = cats.first().first
         val wDp = resources.configuration.screenWidthDp
         val leftDp = (wDp * 0.27f).toInt().coerceIn(104, 200)
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(4)) }
+        val cream = 0xFFF3E6C4.toInt()
+        gridHost.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            background = Materials.woodRail(this@MainActivity)
+            setPadding(dp(14), dp(8), dp(14), dp(11))
+            addView(TextView(context).apply {
+                text = "Game Center"; textSize = 20f; setTextColor(cream); setTypeface(typeface, Typeface.BOLD)
+                setShadowLayer(1f, 0f, 2f, 0xFF2A1A0A.toInt())
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(TextView(context).apply {
+                text = "${gameList.size} games"; textSize = 12f; setTextColor(0xFFD9C79A.toInt())
+                setShadowLayer(1f, 0f, 1f, 0xFF2A1A0A.toInt())
+            })
+        }, LinearLayout.LayoutParams(-1, -2))
+        gridHost.addView(Materials.shadowStripView(this), LinearLayout.LayoutParams(-1, dp(5)))
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(6), dp(6), dp(6), dp(8)) }
+        val left = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = Materials.stitchedLeather(this@MainActivity, 4)
+        }
         cats.forEach { (id, title, n) ->
             val r = TextView(this).apply {
                 text = "$title  ($n)"; textSize = 14f; setTextColor(Theme.TEXT); gravity = Gravity.CENTER_VERTICAL
@@ -724,6 +761,7 @@ class MainActivity : Activity() {
                 isFocusable = true; isClickable = true; tag = "gamecat"; isSelected = id == gameCat
                 background = navRowBackground(this@MainActivity)
                 setOnFocusChangeListener { _, has ->
+                    Anim.focusPop(this, has, 1.03f)
                     if (has && gameCat != id) { gameCat = id; gameCatRows.forEach { it.isSelected = it === this }; fillGameGrid() }
                 }
                 setOnClickListener { gameGrid.getChildAt(0)?.requestFocus() }
@@ -732,43 +770,55 @@ class MainActivity : Activity() {
             left.addView(r, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
         }
         val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        gameInfo = TextView(this).apply {
-            textSize = 13f; setTextColor(Theme.TEXT_DIM); setPadding(dp(10), dp(6), dp(10), dp(4)); minLines = 2
+        val label = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Materials.stitchedLeather(this@MainActivity, 4)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
         }
-        right.addView(gameInfo, LinearLayout.LayoutParams(-1, -2))
-        gameGrid = TileGrid(this).apply { columns = ((wDp - leftDp - 16) / 92).coerceIn(2, 6); aspect = 1.3f }
-        right.addView(gameGrid, LinearLayout.LayoutParams(-1, -2))
+        gameTitle = TextView(this).apply {
+            textSize = 17f; setTextColor(cream); setTypeface(typeface, Typeface.BOLD); maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END; setShadowLayer(1f, 0f, 2f, 0xFF000000.toInt())
+        }
+        gameMeta = TextView(this).apply { textSize = 12f; setTextColor(Theme.TEXT_DIM); minLines = 1; maxLines = 2 }
+        label.addView(gameTitle); label.addView(gameMeta)
+        right.addView(label, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(8), 0, 0, dp(6)) })
+        gameGrid = TileGrid(this).apply { columns = ((wDp - leftDp - 28) / 96).coerceIn(2, 6); aspect = 1.55f }
+        right.addView(gameGrid, LinearLayout.LayoutParams(-1, -2).apply { marginStart = dp(8) })
         row.addView(left, LinearLayout.LayoutParams(dp(leftDp), -2))
         row.addView(right, LinearLayout.LayoutParams(0, -2, 1f))
         gridHost.addView(row, LinearLayout.LayoutParams(-1, -2))
         fillGameGrid()
     }
 
-    private fun gameDescription(g: Game): String {
+    private fun gameDescription(g: Game): Pair<String, String> {
         val n = Games.played(this, g)
         val last = Games.lastPlayed(this, g)
         val played = if (n == 0) "not played yet" else "played $n× · " +
             DateUtils.getRelativeTimeSpanString(last, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
-        return "${g.title}\n${g.systemLabel} · $played"
+        return g.title to "${g.systemLabel} · $played"
     }
 
     private fun fillGameGrid() {
         gameGrid.removeAllViews()
         val favs = Games.favs(this)
         val list = gamesIn(gameCat)
-        gameInfo.text = (gameCatRows.firstOrNull { it.isSelected }?.text?.toString() ?: "") +
-            if (list.isEmpty()) "\nNo games here yet. Put ROMs in a system folder (see Launcher settings → Games)." else "\nA to play, X for options"
+        gameTitle.text = gameCatRows.firstOrNull { it.isSelected }?.text?.toString()?.substringBefore("  (") ?: ""
+        gameMeta.text = if (list.isEmpty()) "No games here yet. Put ROMs in a system folder (Launcher settings → Games)." else "A to play, X for options"
         list.forEach { g ->
             val t = CoverTile(this, g, g.id in favs)
-            t.setOnClickListener { playGame(g) }
+            t.setOnClickListener { playGame(g, it) }
             t.setOnLongClickListener { gameMenu(g); true }
-            t.setOnFocusChangeListener { _, has -> if (has) gameInfo.text = gameDescription(g) }
+            t.setOnFocusChangeListener { v, has ->
+                Anim.focusPop(v, has, 1.1f)
+                if (has) { val (a, b) = gameDescription(g); gameTitle.text = a; gameMeta.text = b }
+            }
             gameGrid.addView(t)
         }
+        Anim.stagger(gameGrid, 15)
     }
 
-    private fun playGame(g: Game) {
-        val err = Games.launch(this, g)
+    private fun playGame(g: Game, from: View? = null) {
+        val err = Games.launch(this, g, Anim.launchOptions(from))
         if (err != null) Toast.makeText(this, err, Toast.LENGTH_LONG).show()
         else if (g.app != null) prefs.edit().putInt("cnt_" + g.app.key, launchCount(g.app) + 1).apply()
     }
@@ -830,6 +880,7 @@ class MainActivity : Activity() {
             val meta = appLabel(n.packageName) + "  ·  " +
                 DateUtils.getRelativeTimeSpanString(n.postTime, now, DateUtils.MINUTE_IN_MILLIS)
             val row = HubRow(this, icon, title, body, meta, n.key)
+            row.setOnFocusChangeListener { v, has -> Anim.focusPop(v, has, 1.02f) }
             row.setOnClickListener { openNotification(n.key) }
             row.setOnLongClickListener { showHubMenu(n.key); true }
             gridHost.addView(row, rowLp())
@@ -894,6 +945,7 @@ class MainActivity : Activity() {
         quickIds.forEach { id ->
             val (title, icon, glyph) = quickMeta(id)
             val t = QuickTile(this, id, title, icon, glyph)
+            t.setOnFocusChangeListener { v, has -> Anim.focusPop(v, has, 1.07f) }
             t.setOnClickListener { quickPrimary(id); refreshQuick() }
             t.setOnLongClickListener { quickSecondary(id); refreshQuick(); true }
             quickTiles[id] = t
@@ -1190,11 +1242,11 @@ class MainActivity : Activity() {
 
     // ───────────────────────── launching & options ─────────────────────────
 
-    private fun launch(e: AppEntry) {
+    private fun launch(e: AppEntry, from: View? = null) {
         val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(e.component)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         try {
-            startActivity(i)
+            startActivity(i, Anim.launchOptions(from))
             prefs.edit().putInt("cnt_" + e.key, launchCount(e) + 1).apply()
         } catch (_: Exception) {
             Toast.makeText(this, "Can't open ${e.label}", Toast.LENGTH_SHORT).show()
@@ -1355,13 +1407,13 @@ class MainActivity : Activity() {
     private fun shiftCategory(delta: Int) {
         val all = cats()
         val cur = all.indexOf(category).let { if (it < 0) 0 else it }
-        setCategory(all[(cur + delta + all.size) % all.size])
+        setCategory(all[(cur + delta + all.size) % all.size], if (delta > 0) 1 else -1)
     }
 
     private fun onConfirm() {
         val f = currentFocus
         if (f === searchBar) { submitSearch(); return }
-        if (f != null && f.isClickable) f.performClick()
+        if (f != null && f.isClickable) { Anim.press(f); f.performClick() }
     }
 
     private fun onOptions() {
