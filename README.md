@@ -22,6 +22,24 @@ An Android home-screen replacement styled after BlackBerry OS 7 and built to be 
 | L1 / R1 | Previous / next folder |
 | Select | System settings |
 
+## Slate Keyboard (system keyboard for gamepads)
+Open **Slate Keyboard** from the app list, turn it on, then choose it as the current keyboard.
+
+| Button | Action |
+|---|---|
+| D-pad / stick | Move the highlighted key |
+| A | Type |
+| B | Backspace (also when the device sends B as Back; can be turned off in the setup screen) |
+| X | Space |
+| Y | Shift (twice = caps lock) |
+| Start | Enter / editor action (Go, Search, Send…) |
+| Select | Hide keyboard |
+| L1 / R1 | Move cursor left / right |
+| L2 / R2 | Letters / symbols / more symbols / emoji |
+| Up from the top row | Word suggestions (bundled 10k-word list + words you type), A to accept |
+
+Touch works too. Auto-capitalisation, number/phone layouts and password fields are handled.
+
 ## Build
 The **Build APK** GitHub Action produces `app-debug.apk` on every push (Actions tab → latest run → Artifacts).
 Locally: `./gradlew assembleDebug` (needs the Android SDK, JDK 17).

@@ -437,7 +437,7 @@ class MainActivity : Activity() {
         Thread {
             val q = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
             val list = pm.queryIntentActivities(q, 0)
-                .filter { it.activityInfo.packageName != packageName }
+                .filter { it.activityInfo.name != MainActivity::class.java.name }
                 .map {
                     val ai = it.activityInfo.applicationInfo
                     val label = it.loadLabel(pm).toString()
