@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APKs
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -12,3 +12,7 @@ jobs:
         with:
           name: slate-launcher-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slate-music-debug
+          path: music/build/outputs/apk/debug/music-debug.apk

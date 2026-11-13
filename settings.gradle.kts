@@ -7,3 +7,6 @@ dependencyResolutionManagement {
 }
 rootProject.name = "SlateLauncher"
 include(":app")
+include(":music")
+include(":pwnapple")
+project(":pwnapple").projectDir = file("third_party/pwnapple")

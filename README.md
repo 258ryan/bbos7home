@@ -47,3 +47,23 @@ Locally: `./gradlew assembleDebug` (needs the Android SDK, JDK 17).
 ## Install
 Install the APK, press Home, choose **Slate Launcher** → Always. For the notification row, press A on
 the prompt in the top row and grant notification access.
+
+## Slate Music (standalone app, `music/`)
+A separate skeuomorphic music player (iOS 6 / BB OS 7 look: black nav bars, pinstripe lists, linen Now Playing
+screen with glossy art + reflection, chrome transport buttons). Uses the vendored
+[Pwnapple](third_party/pwnapple/NOTICE.md) component kit (MIT).
+
+Songs / Artists / Albums / Now Playing, search, shuffle / repeat, background playback with a media notification.
+
+| Button | Action |
+|---|---|
+| A / B | Select / back |
+| X | Play / pause |
+| Y | Shuffle |
+| Select | Repeat |
+| L1 / R1 | Previous / next track |
+| L2 / R2 | Previous / next tab |
+| Start | Jump to / from Now Playing |
+| D-pad on Now Playing | left / right = seek 10 s, up / down = volume |
+
+CI builds both APKs: `slate-launcher-debug` and `slate-music-debug`.
