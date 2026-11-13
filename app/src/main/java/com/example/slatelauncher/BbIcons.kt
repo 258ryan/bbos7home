@@ -53,6 +53,25 @@ object BbIcons {
         return rules.firstOrNull { (_, kws) -> kws.any { it in w } }?.first
     }
 
+    private val uiCache = HashMap<String, Bitmap?>()
+
+    /** Tango / elementary UI icons bundled in assets/ui (file name without .png, e.g. "tango_edit-delete"). */
+    @Synchronized
+    fun ui(ctx: Context, file: String): Drawable? {
+        val bmp = uiCache.getOrPut(file) {
+            try { ctx.assets.open("ui/$file.png").use { BitmapFactory.decodeStream(it) } } catch (_: Exception) { null }
+        } ?: return null
+        return BitmapDrawable(ctx.resources, bmp)
+    }
+
+    fun assetDrawable(ctx: Context, path: String): Drawable? = try {
+        ctx.assets.open(path).use { BitmapFactory.decodeStream(it) }?.let { BitmapDrawable(ctx.resources, it) }
+    } catch (_: Exception) { null }
+
+    /** "ui:tango_x" -> Tango / elementary icon, anything else -> BB OS 7 theme icon. */
+    fun any(ctx: Context, name: String): Drawable? =
+        if (name.startsWith("ui:")) ui(ctx, name.removePrefix("ui:")) else drawable(ctx, name)
+
     @Synchronized
     fun drawable(ctx: Context, name: String): Drawable? {
         val bmp = cache.getOrPut(name) {

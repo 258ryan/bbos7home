@@ -40,6 +40,19 @@ Open **Slate Keyboard** from the app list, turn it on, then choose it as the cur
 
 Touch works too. Auto-capitalisation, number/phone layouts and password fields are handled.
 
+## Games page, settings, icon packs
+* **Games** (folder strip): categories on the left (Recent, Favourites, All, Android, one per system), cover grid on the right,
+  details above it. A plays, X for options. Android games plus ROMs found in `<ROMs>/<system>/` (gba, snes, psx, psp, ...).
+  Cover art: `<game>.png` next to the ROM, or in `images/`, `covers/`, `media/box2dfront/` or `<root>/art/<system>/`.
+  Emulator launch recipes (RetroArch cores, PPSSPP, custom) are editable in settings; the defaults are untested starting points.
+* **Launcher settings** (Select, or the Quick Settings tile): master-detail layout with Appearance, Icons, Apps, Folders,
+  Controls, Games, Backup, About. Wallpaper picker (built-in generated wallpapers or your own picture), dim level,
+  textures on/off, grid columns, hidden apps, swap A/B, export / import of all settings.
+* **Icons**: X on an app -> Change icon (icon pack, full BB OS 7 set, Tango / elementary, your own image), Rename, Hide.
+  Nova / ADW style icon packs are supported (`appfilter.xml`); unmatched icons can sit on the glossy plate, stay original or use the pack background.
+* UI glyphs (Quick Settings, menus, settings) use Tango (public domain) and elementary (GPL-3.0-or-later) icons;
+  apps keep the BB OS 7 icons, so the two roles look different.
+
 ## Build
 The **Build APK** GitHub Action produces `app-debug.apk` on every push (Actions tab → latest run → Artifacts).
 Locally: `./gradlew assembleDebug` (needs the Android SDK, JDK 17).
