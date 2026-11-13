@@ -16,6 +16,8 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.BatteryManager
+import android.os.Build
+import android.text.format.DateFormat
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -84,6 +86,7 @@ class MainActivity : Activity() {
     private var expanded = false
     private var cols = 6
     private var cellDp = 60
+    private var barCellDp = 90
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) = updateBattery(i)
@@ -98,6 +101,9 @@ class MainActivity : Activity() {
         window.setSoftInputMode(
             WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN or WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
         )
+        if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
+        else window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
         setContentView(buildUi())
         computeColumns()
         updatePager()
@@ -152,31 +158,40 @@ class MainActivity : Activity() {
     private fun hairline() = View(this).apply { setBackgroundColor(Color.parseColor("#44FFFFFF")) }
     private fun addHairline(parent: LinearLayout) = parent.addView(hairline(), LinearLayout.LayoutParams(-1, 1))
 
+    @Suppress("DEPRECATION")
     private fun buildUi(): View {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            fitsSystemWindows = true
+        }
+        val banner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = bannerBackground()
         }
 
         // Header: date (left), big clock (centre), battery (right)
         val header = FrameLayout(this).apply { setPadding(dp(12), dp(2), dp(12), dp(2)) }
-        header.addView(TextClock(this).apply {
+        val clockBox = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
+        clockBox.addView(TextClock(this).apply {
             format12Hour = "h:mm"; format24Hour = "H:mm"
             textSize = 44f; setTextColor(Theme.TEXT)
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
             includeFontPadding = false
-            setShadowLayer(6f, 0f, 2f, Color.BLACK)
-        }, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL))
+        })
+        if (!DateFormat.is24HourFormat(this)) clockBox.addView(TextClock(this).apply {
+            format12Hour = "a"; format24Hour = "a"
+            textSize = 14f; setTextColor(Theme.TEXT); setPadding(dp(3), 0, 0, dp(6))
+        })
+        header.addView(clockBox, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL))
         header.addView(TextClock(this).apply {
             format12Hour = "EEE, MMM d"; format24Hour = "EEE, MMM d"
             textSize = 14f; setTextColor(Theme.TEXT); setShadowLayer(4f, 0f, 1f, Color.BLACK)
         }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { topMargin = dp(4) })
         batteryText = TextView(this).apply { textSize = 14f; setTextColor(Theme.TEXT); setShadowLayer(4f, 0f, 1f, Color.BLACK) }
         header.addView(batteryText, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = dp(4) })
-        root.addView(header, LinearLayout.LayoutParams(-1, -2))
+        banner.addView(header, LinearLayout.LayoutParams(-1, -2))
 
-        // Counters: phone / messages / mail, search at the right
-        addHairline(root)
+        // Counters: sound profile (left), phone / messages / mail (centre), search (right)
+        addHairline(banner)
         phoneChip = CounterChip(this, BbIcons.drawable(this, "phone"), "phone")
         msgChip = CounterChip(this, BbIcons.drawable(this, "messages"), "msg")
         mailChip = CounterChip(this, BbIcons.drawable(this, "mail"), "mail")
@@ -186,12 +201,14 @@ class MainActivity : Activity() {
         val searchChip = CounterChip(this, BbIcons.drawable(this, "search"), "search").apply {
             setOnClickListener { if (searching) closeSearch() else openSearch("") }
         }
+        val soundChip = CounterChip(this, BbIcons.drawable(this, "sound"), "sound").apply {
+            setOnClickListener { startFirst(Intent(Settings.ACTION_SOUND_SETTINGS)) }
+        }
         val counters = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(2), dp(8), dp(2))
-            setBackgroundColor(Color.parseColor("#55000000"))
-            addView(View(context), LinearLayout.LayoutParams(dp(48), 1))
+            addView(soundChip, LinearLayout.LayoutParams(-2, -2))
             addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
             addView(phoneChip, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4), 0, dp(4), 0) })
             addView(msgChip, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4), 0, dp(4), 0) })
@@ -199,7 +216,8 @@ class MainActivity : Activity() {
             addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
             addView(searchChip, LinearLayout.LayoutParams(-2, -2))
         }
-        root.addView(counters, LinearLayout.LayoutParams(-1, -2))
+        banner.addView(counters, LinearLayout.LayoutParams(-1, -2))
+        root.addView(banner, LinearLayout.LayoutParams(-1, -2))
         addHairline(root)
 
         // Search bar (hidden until used)
@@ -227,8 +245,7 @@ class MainActivity : Activity() {
         // Wallpaper window shown while collapsed
         captionFloat = TextView(this).apply {
             textSize = 14f; setTextColor(Theme.TEXT); gravity = Gravity.CENTER
-            maxLines = 1; setShadowLayer(4f, 0f, 1f, Color.BLACK)
-            setPadding(dp(8), dp(2), dp(8), dp(4))
+            maxLines = 1; visibility = View.GONE
         }
         midSpacer = FrameLayout(this).apply {
             addView(captionFloat, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
@@ -298,6 +315,11 @@ class MainActivity : Activity() {
             setPadding(dp(6), dp(6), dp(6), dp(6))
         }
         root.addView(hintBar, LinearLayout.LayoutParams(-1, -2))
+        root.setOnApplyWindowInsetsListener { _, ins ->
+            banner.setPadding(0, ins.systemWindowInsetTop, 0, 0)
+            hintBar.setPadding(dp(6), dp(6), dp(6), dp(6) + ins.systemWindowInsetBottom)
+            ins
+        }
         return root
     }
 
@@ -312,6 +334,8 @@ class MainActivity : Activity() {
         val wDp = resources.configuration.screenWidthDp
         cols = (wDp / 70).coerceIn(5, 9)
         cellDp = wDp / cols
+        val barCols = (wDp / 90).coerceIn(4, 8)
+        barCellDp = wDp / barCols
     }
 
     /** Show/hide pieces for collapsed (app bar over wallpaper) vs expanded (dimmed full grid). */
@@ -465,8 +489,9 @@ class MainActivity : Activity() {
         return out.filter { it.second.isNotEmpty() }
     }
 
-    private fun makeTile(e: AppEntry): IconTile {
-        val t = IconTile(this, e, (cellDp * 0.8f).toInt())
+    private fun makeTile(e: AppEntry, bar: Boolean = false): IconTile {
+        val t = if (bar) IconTile(this, e, (barCellDp * 0.62f).toInt(), showLabel = true)
+        else IconTile(this, e, (cellDp * 0.8f).toInt())
         t.setOnClickListener { launch(e) }
         t.setOnLongClickListener { showOptions(e); true }
         t.setOnFocusChangeListener { _, has -> if (has) { caption.text = e.label; captionFloat.text = e.label } }
@@ -513,8 +538,8 @@ class MainActivity : Activity() {
                 gridHost.addView(g, LinearLayout.LayoutParams(-1, -2))
             }
         } else {
-            val px = dp(cellDp)
-            flat.forEach { barRow.addView(makeTile(it), LinearLayout.LayoutParams(px, px)) }
+            val w = dp(barCellDp)
+            flat.forEach { barRow.addView(makeTile(it, bar = true), LinearLayout.LayoutParams(w, (w * 1.2f).toInt())) }
         }
         emptyText.visibility = if (flat.isEmpty()) View.VISIBLE else View.GONE
         emptyText.text = when {
@@ -576,14 +601,18 @@ class MainActivity : Activity() {
 
     private fun refreshCounters() {
         if (!::phoneChip.isInitialized) return
+        val chips = listOf("phone" to phoneChip, "msg" to msgChip, "mail" to mailChip)
         if (!listenerEnabled()) {
-            listOf(phoneChip, msgChip, mailChip).forEach { it.setCount("–") }
+            // Access not granted yet: show "–" so X on a counter can lead to the settings page.
+            chips.forEach { (_, c) -> c.visibility = View.VISIBLE; c.setCount("–") }
             return
         }
         val counts = activeNotifs().mapNotNull { kindOf(it) }.groupingBy { it }.eachCount()
-        phoneChip.setCount((counts["phone"] ?: 0).toString())
-        msgChip.setCount((counts["msg"] ?: 0).toString())
-        mailChip.setCount((counts["mail"] ?: 0).toString())
+        chips.forEach { (k, c) ->
+            val n = counts[k] ?: 0
+            c.setCount(n.toString())
+            c.visibility = if (n == 0) View.GONE else View.VISIBLE   // OS 7 only shows active indicators
+        }
     }
 
     private fun clearCounter(kind: String) {

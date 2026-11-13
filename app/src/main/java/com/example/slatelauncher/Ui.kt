@@ -62,3 +62,9 @@ fun selectedPill(ctx: Context): Drawable = GradientDrawable(
     GradientDrawable.Orientation.TOP_BOTTOM,
     intArrayOf(Theme.BLUE_LIGHT, Theme.BLUE, Theme.BLUE_DARK)
 ).apply { cornerRadius = ctx.dpf(14f) }
+
+/** Solid navy banner block (date, clock, counters), as on OS 7. */
+fun bannerBackground(): Drawable = GradientDrawable(
+    GradientDrawable.Orientation.TOP_BOTTOM,
+    intArrayOf(Color.parseColor("#F0183663"), Color.parseColor("#F00B1A38"))
+)
