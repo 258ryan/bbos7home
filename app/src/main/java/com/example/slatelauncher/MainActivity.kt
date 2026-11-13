@@ -66,6 +66,7 @@ class MainActivity : Activity() {
     private lateinit var gridHost: LinearLayout
     private lateinit var emptyText: TextView
     private lateinit var caption: TextView
+    private lateinit var captionFloat: TextView
     private lateinit var searchBar: EditText
     private lateinit var batteryText: TextView
     private lateinit var hintBar: LinearLayout
@@ -224,7 +225,14 @@ class MainActivity : Activity() {
         root.addView(searchBar, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(10), dp(4), dp(10), dp(2)) })
 
         // Wallpaper window shown while collapsed
-        midSpacer = View(this)
+        captionFloat = TextView(this).apply {
+            textSize = 14f; setTextColor(Theme.TEXT); gravity = Gravity.CENTER
+            maxLines = 1; setShadowLayer(4f, 0f, 1f, Color.BLACK)
+            setPadding(dp(8), dp(2), dp(8), dp(4))
+        }
+        midSpacer = FrameLayout(this).apply {
+            addView(captionFloat, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        }
         root.addView(midSpacer, LinearLayout.LayoutParams(-1, 0, 1f))
 
         // Folder strip: previous (dim) | current | next (dim)
@@ -243,8 +251,9 @@ class MainActivity : Activity() {
         root.addView(strip, LinearLayout.LayoutParams(-1, -2))
         addHairline(root)
 
-        // Name of the focused icon
+        // Name of the focused icon (expanded view only; collapsed uses captionFloat above the strip)
         caption = TextView(this).apply {
+            visibility = View.GONE
             textSize = 13f; setTextColor(Theme.TEXT_DIM); gravity = Gravity.CENTER
             maxLines = 1; setShadowLayer(3f, 0f, 1f, Color.BLACK)
             setPadding(dp(8), dp(2), dp(8), dp(2))
@@ -310,6 +319,7 @@ class MainActivity : Activity() {
         val full = expanded || searching
         midSpacer.visibility = if (full) View.GONE else View.VISIBLE
         barScroll.visibility = if (full) View.GONE else View.VISIBLE
+        caption.visibility = if (full) View.VISIBLE else View.GONE
         homeScroll.visibility = if (full) View.VISIBLE else View.GONE
         root.setBackgroundColor(if (full) Color.parseColor("#D8000000") else Color.TRANSPARENT)
         updateHints()
@@ -459,7 +469,7 @@ class MainActivity : Activity() {
         val t = IconTile(this, e, (cellDp * 0.8f).toInt())
         t.setOnClickListener { launch(e) }
         t.setOnLongClickListener { showOptions(e); true }
-        t.setOnFocusChangeListener { _, has -> if (has) caption.text = e.label }
+        t.setOnFocusChangeListener { _, has -> if (has) { caption.text = e.label; captionFloat.text = e.label } }
         return t
     }
 
@@ -513,7 +523,7 @@ class MainActivity : Activity() {
             category == Category.FREQUENT -> "Apps you use often will appear here"
             else -> "Nothing in this folder"
         }
-        if (flat.isEmpty()) caption.text = ""
+        if (flat.isEmpty()) { caption.text = ""; captionFloat.text = "" }
         if (wasGrid) {
             val tiles = allTiles()
             (tiles.firstOrNull { it.entry.key == focusedKey } ?: tiles.firstOrNull())?.requestFocus()
