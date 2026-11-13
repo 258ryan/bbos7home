@@ -104,20 +104,20 @@ class PlaybackService : Service() {
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val n = Notification.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.drawable.ic_music)
             .setContentTitle(t?.title ?: "Slate Music")
             .setContentText(t?.artist ?: "")
             .setContentIntent(open)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(st.playing)
-            .addAction(action(android.R.drawable.ic_media_previous, "Previous", ACT_PREV))
+            .addAction(action(R.drawable.ic_prev, "Previous", ACT_PREV))
             .addAction(
                 action(
-                    if (st.playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+                    if (st.playing) R.drawable.ic_pause else R.drawable.ic_play,
                     if (st.playing) "Pause" else "Play", ACT_TOGGLE
                 )
             )
-            .addAction(action(android.R.drawable.ic_media_next, "Next", ACT_NEXT))
+            .addAction(action(R.drawable.ic_next, "Next", ACT_NEXT))
             .setStyle(Notification.MediaStyle().setMediaSession(session.sessionToken).setShowActionsInCompactView(0, 1, 2))
             .build()
 

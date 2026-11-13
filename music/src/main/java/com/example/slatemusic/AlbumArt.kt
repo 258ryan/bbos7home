@@ -13,8 +13,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -73,7 +72,7 @@ fun AlbumArt(
             )
         } else {
             Icon(
-                Icons.Filled.MusicNote, contentDescription = null, tint = Color(0x99FFFFFF),
+                painter = painterResource(R.drawable.ic_music), contentDescription = null, tint = Color(0x99FFFFFF),
                 modifier = Modifier.align(Alignment.Center).fillMaxSize(0.5f)
             )
         }

@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -214,12 +215,12 @@ private fun Controls(ui: UiState, compact: Boolean, modifier: Modifier = Modifie
         Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (compact) 16.dp else 22.dp)) {
-            ChromeButton(Icons.Filled.SkipPrevious, "Previous", small, active && ui.prow == 1 && ui.pcol == 0) { Player.prev() }
+            ChromeButton(painterResource(R.drawable.ic_prev), "Previous", small, active && ui.prow == 1 && ui.pcol == 0) { Player.prev() }
             ChromeButton(
-                if (st.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play / Pause", big,
+                painterResource(if (st.playing) R.drawable.ic_pause else R.drawable.ic_play), "Play / Pause", big,
                 active && ui.prow == 1 && ui.pcol == 1
             ) { Player.togglePlay() }
-            ChromeButton(Icons.Filled.SkipNext, "Next", small, active && ui.prow == 1 && ui.pcol == 2) { Player.next(false) }
+            ChromeButton(painterResource(R.drawable.ic_next), "Next", small, active && ui.prow == 1 && ui.pcol == 2) { Player.next(false) }
         }
         Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
 

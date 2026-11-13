@@ -49,7 +49,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -230,14 +231,14 @@ fun SearchBar(ui: UiState) {
 // ───────────── controls ─────────────
 
 @Composable
-fun ChromeButton(icon: ImageVector, description: String, size: Dp, selected: Boolean, onClick: () -> Unit) {
+fun ChromeButton(icon: Painter, description: String, size: Dp, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.size(size)
             .then(if (selected) Modifier.gel(size / 2, glow = true) else Modifier.chrome(size / 2))
             .noIndicationClick(onClick),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(size * 0.5f))
+        Icon(painter = icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(size * 0.5f))
     }
 }
 
@@ -283,6 +284,6 @@ fun MiniPlayer(ui: UiState) {
             Txt(t.title, 15, bold = true)
             Txt(t.artist, 12, Slate.Dim)
         }
-        ChromeButton(if (st.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play / Pause", 40.dp, false) { Player.togglePlay() }
+        ChromeButton(painterResource(if (st.playing) R.drawable.ic_pause else R.drawable.ic_play), "Play / Pause", 40.dp, false) { Player.togglePlay() }
     }
 }
