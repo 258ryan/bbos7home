@@ -20,6 +20,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.service.notification.StatusBarNotification
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
@@ -31,7 +32,8 @@ import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
-import android.widget.HorizontalScrollView
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextClock
@@ -40,8 +42,8 @@ import android.widget.Toast
 
 /**
  * BlackBerry-OS-7-style home screen, driven by a gamepad:
- *   D-pad / left stick  move      A  open        B  back / "All" folder
- *   X  options / clear            Y or Start  search      Select  system settings
+ *   D-pad / left stick  move      A  open        B  back / "All Apps"
+ *   X  options / clear counter    Y or Start  search      Select  system settings
  *   L1 / R1  previous / next folder
  * Typing on a hardware keyboard starts search, like OS 7's universal search.
  */
@@ -52,15 +54,19 @@ class MainActivity : Activity() {
     private lateinit var imm: InputMethodManager
     private val prefs by lazy { getSharedPreferences("slate", MODE_PRIVATE) }
 
-    private lateinit var notifRow: LinearLayout
     private lateinit var homeScroll: ScrollView
     private lateinit var grid: TileGrid
+    private lateinit var dock: LinearLayout
     private lateinit var emptyText: TextView
     private lateinit var searchBar: EditText
-    private lateinit var caption: TextView
     private lateinit var batteryText: TextView
     private lateinit var hintBar: LinearLayout
-    private val catViews = mutableListOf<TextView>()
+    private lateinit var phoneChip: CounterChip
+    private lateinit var msgChip: CounterChip
+    private lateinit var mailChip: CounterChip
+    private lateinit var pagerPrev: TextView
+    private lateinit var pagerCur: TextView
+    private lateinit var pagerNext: TextView
 
     private var apps: List<AppEntry> = emptyList()
     private var appsKey = ""
@@ -82,21 +88,25 @@ class MainActivity : Activity() {
         )
         setContentView(buildUi())
         applyColumns()
-        updateStrip()
+        updatePager()
         updateHints()
     }
 
     override fun onStart() {
         super.onStart()
         updateBattery(registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED)))
-        HubService.onChange = { handler.post { refreshNotifs() } }
-        refreshNotifs()
+        HubService.onChange = { handler.post { refreshCounters() } }
+        refreshCounters()
     }
 
     override fun onResume() {
         super.onResume()
         refreshApps()
-        refreshNotifs()
+        refreshCounters()
+        if (!listenerEnabled() && !prefs.getBoolean("hinted", false)) {
+            prefs.edit().putBoolean("hinted", true).apply()
+            Toast.makeText(this, "Press X on the counters to enable notification counts", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onStop() {
@@ -133,37 +143,46 @@ class MainActivity : Activity() {
             fitsSystemWindows = true
         }
 
-        // Status bar: time, date, battery
-        val status = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Theme.BAR)
-            setPadding(dp(12), dp(4), dp(12), dp(4))
-        }
-        status.addView(TextClock(this).apply {
-            format12Hour = "h:mm a"; format24Hour = "HH:mm"
-            textSize = 16f; setTextColor(Theme.TEXT); setTypeface(typeface, Typeface.BOLD)
-        })
-        status.addView(TextClock(this).apply {
+        // Header: date (left), big clock (centre), battery (right)
+        val header = FrameLayout(this).apply { setPadding(dp(12), dp(4), dp(12), 0) }
+        header.addView(TextClock(this).apply {
+            format12Hour = "h:mm"; format24Hour = "H:mm"
+            textSize = 64f; setTextColor(Theme.TEXT)
+            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+            includeFontPadding = false
+            setShadowLayer(6f, 0f, 2f, Color.BLACK)
+        }, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL))
+        header.addView(TextClock(this).apply {
             format12Hour = "EEE, MMM d"; format24Hour = "EEE, MMM d"
-            textSize = 12f; setTextColor(Theme.TEXT_DIM); gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            textSize = 13f; setTextColor(Theme.TEXT)
+        }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { topMargin = dp(8) })
         batteryText = TextView(this).apply { textSize = 13f; setTextColor(Theme.TEXT) }
-        status.addView(batteryText)
-        root.addView(status, LinearLayout.LayoutParams(-1, -2))
+        header.addView(batteryText, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = dp(8) })
+        root.addView(header, LinearLayout.LayoutParams(-1, -2))
 
-        // Notification indicator row
-        notifRow = LinearLayout(this).apply {
+        // Counters: phone / messages / mail, search at the right
+        phoneChip = CounterChip(this, BbIcons.drawable(this, "phone"), "phone")
+        msgChip = CounterChip(this, BbIcons.drawable(this, "messages"), "msg")
+        mailChip = CounterChip(this, BbIcons.drawable(this, "mail"), "mail")
+        phoneChip.setOnClickListener { startFirst(Intent(Intent.ACTION_DIAL)) }
+        msgChip.setOnClickListener { startFirst(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MESSAGING)) }
+        mailChip.setOnClickListener { startFirst(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_EMAIL)) }
+        val searchChip = CounterChip(this, BbIcons.drawable(this, "search"), "search").apply {
+            setOnClickListener { if (searching) closeSearch() else openSearch("") }
+        }
+        val counters = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), 0, dp(8), 0)
+            addView(View(context), LinearLayout.LayoutParams(dp(48), 1))
+            addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
+            addView(phoneChip, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4), 0, dp(4), 0) })
+            addView(msgChip, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4), 0, dp(4), 0) })
+            addView(mailChip, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4), 0, dp(4), 0) })
+            addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
+            addView(searchChip, LinearLayout.LayoutParams(-2, -2))
         }
-        val notifScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            setBackgroundColor(Color.parseColor("#55000000"))
-            addView(notifRow, ViewGroup.LayoutParams(-2, -1))
-        }
-        root.addView(notifScroll, LinearLayout.LayoutParams(-1, dp(56)))
+        root.addView(counters, LinearLayout.LayoutParams(-1, -2))
 
         // Search bar (hidden until used)
         searchBar = EditText(this).apply {
@@ -198,7 +217,7 @@ class MainActivity : Activity() {
         val inner = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false; clipToPadding = false
-            setPadding(dp(6), dp(8), dp(6), dp(8))
+            setPadding(dp(4), dp(8), dp(4), dp(8))
             addView(grid, LinearLayout.LayoutParams(-1, -2))
             addView(emptyText, LinearLayout.LayoutParams(-1, -2))
         }
@@ -210,33 +229,28 @@ class MainActivity : Activity() {
         }
         root.addView(homeScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        // Caption (name of the focused item)
-        caption = TextView(this).apply {
-            textSize = 15f; setTextColor(Theme.TEXT); gravity = Gravity.CENTER
-            setTypeface(typeface, Typeface.BOLD); maxLines = 1
-            setShadowLayer(3f, 0f, 1f, Color.BLACK)
-            setBackgroundColor(Color.parseColor("#66000000"))
-            setPadding(dp(8), dp(4), dp(8), dp(4))
-        }
-        root.addView(caption, LinearLayout.LayoutParams(-1, dp(30)))
-
-        // Folder strip
-        val strip = LinearLayout(this).apply {
+        // Folder pager: previous (dim) | current | next (dim)
+        pagerPrev = pagerLabel(18f, Theme.TEXT_DIM, Gravity.START or Gravity.CENTER_VERTICAL) { shiftCategory(-1) }
+        pagerCur = pagerLabel(22f, Theme.TEXT, Gravity.CENTER) { }
+        pagerNext = pagerLabel(18f, Theme.TEXT_DIM, Gravity.END or Gravity.CENTER_VERTICAL) { shiftCategory(1) }
+        val pager = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(6), dp(12), dp(2))
+            addView(pagerPrev, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(pagerCur, LinearLayout.LayoutParams(0, -2, 1.3f))
+            addView(pagerNext, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        root.addView(pager, LinearLayout.LayoutParams(-1, -2))
+
+        // Dock (first favourites)
+        dock = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
             setBackgroundColor(Theme.BAR)
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setPadding(dp(4), dp(2), dp(4), dp(2))
+            visibility = View.GONE
         }
-        Category.values().forEach { c ->
-            val tv = TextView(this).apply {
-                text = c.title; textSize = 11f; gravity = Gravity.CENTER
-                maxLines = 1; setPadding(0, dp(6), 0, dp(6))
-                setOnClickListener { setCategory(c) }
-            }
-            catViews.add(tv)
-            strip.addView(tv, LinearLayout.LayoutParams(0, -2, 1f))
-        }
-        root.addView(strip, LinearLayout.LayoutParams(-1, -2))
+        root.addView(dock, LinearLayout.LayoutParams(-1, -2))
 
         // Button hints
         hintBar = LinearLayout(this).apply {
@@ -249,9 +263,16 @@ class MainActivity : Activity() {
         return root
     }
 
+    private fun pagerLabel(size: Float, color: Int, gravity: Int, onClick: () -> Unit) = TextView(this).apply {
+        textSize = size; setTextColor(color); this.gravity = gravity
+        maxLines = 1; setShadowLayer(3f, 0f, 1f, Color.BLACK)
+        setPadding(0, dp(4), 0, dp(4))
+        setOnClickListener { onClick() }
+    }
+
     private fun applyColumns() {
         val wDp = resources.configuration.screenWidthDp
-        grid.columns = maxOf(4, wDp / 92)
+        grid.columns = (wDp / 60).coerceIn(4, 8)
     }
 
     private fun hint(btn: String, label: String): View {
@@ -280,13 +301,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun updateStrip() {
-        catViews.forEachIndexed { i, tv ->
-            val sel = Category.values()[i] == category
-            tv.background = if (sel) selectedPill(this) else null
-            tv.setTextColor(if (sel) Color.WHITE else Theme.TEXT_DIM)
-            tv.setTypeface(null, if (sel) Typeface.BOLD else Typeface.NORMAL)
-        }
+    private fun updatePager() {
+        val all = Category.values()
+        pagerPrev.text = all[(category.ordinal + all.size - 1) % all.size].title
+        pagerCur.text = category.title
+        pagerNext.text = all[(category.ordinal + 1) % all.size].title
     }
 
     private fun updateBattery(i: Intent?) {
@@ -306,22 +325,36 @@ class MainActivity : Activity() {
                 .filter { it.activityInfo.packageName != packageName }
                 .map {
                     val ai = it.activityInfo.applicationInfo
+                    val label = it.loadLabel(pm).toString()
+                    val themed = BbIcons.nameFor(it.activityInfo.packageName, label)
                     AppEntry(
-                        it.loadLabel(pm).toString(),
+                        label,
                         ComponentName(it.activityInfo.packageName, it.activityInfo.name),
-                        it.loadIcon(pm),
+                        (themed?.let { n -> BbIcons.drawable(this, n) }) ?: it.loadIcon(pm),
                         ai.category,
-                        (ai.flags and ApplicationInfo.FLAG_SYSTEM) == 0
+                        (ai.flags and ApplicationInfo.FLAG_SYSTEM) == 0,
+                        themed
                     )
                 }
                 .sortedBy { it.label.lowercase() }
             val key = list.joinToString("|") { it.key + it.label }
             handler.post {
                 if (isDestroyed) return@post
-                if (key != appsKey) { appsKey = key; apps = list; rebuildGrid() }
-                else if (category == Category.FREQUENT) rebuildGrid()
+                if (key != appsKey) {
+                    appsKey = key; apps = list
+                    seedFavorites()
+                    rebuildGrid()
+                } else if (category == Category.FREQUENT) rebuildGrid()
             }
         }.start()
+    }
+
+    /** First run: put phone, messages, browser, camera and settings in the dock, like a fresh BB home screen. */
+    private fun seedFavorites() {
+        if (prefs.contains("favs")) return
+        val seed = listOf("phone", "messages", "browser", "camera", "settings")
+            .mapNotNull { n -> apps.firstOrNull { it.themed == n }?.key }
+        prefs.edit().putStringSet("favs", seed.toSet()).apply()
     }
 
     private fun favorites(): MutableSet<String> =
@@ -337,7 +370,8 @@ class MainActivity : Activity() {
             Category.FAVORITES -> { val f = favorites(); apps.filter { it.key in f } }
             Category.MEDIA -> apps.filter {
                 it.category == ApplicationInfo.CATEGORY_AUDIO || it.category == ApplicationInfo.CATEGORY_VIDEO ||
-                    it.category == ApplicationInfo.CATEGORY_IMAGE
+                    it.category == ApplicationInfo.CATEGORY_IMAGE ||
+                    it.themed == "music" || it.themed == "video" || it.themed == "gallery"
             }
             Category.GAMES -> apps.filter { it.category == ApplicationInfo.CATEGORY_GAME }
             Category.DOWNLOADS -> apps.filter { it.isUser }
@@ -346,28 +380,27 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun wireTile(t: IconTile) {
+        val e = t.entry
+        t.setOnClickListener { launch(e) }
+        t.setOnLongClickListener { showOptions(e); true }
+    }
+
     private fun rebuildGrid() {
         val focus = currentFocus
         val wasGrid = focus == null || focus is IconTile
         val focusedKey = (focus as? IconTile)?.entry?.key
         grid.removeAllViews()
         val list = filtered()
-        list.forEach { e ->
-            val t = IconTile(this, e)
-            t.setOnClickListener { launch(e) }
-            t.setOnLongClickListener { showOptions(e); true }
-            val anim = t.onFocusChangeListener
-            t.setOnFocusChangeListener { v, has -> anim.onFocusChange(v, has); if (has) caption.text = e.label }
-            grid.addView(t)
-        }
+        list.forEach { e -> grid.addView(IconTile(this, e).also { wireTile(it) }) }
         emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
         emptyText.text = when {
             searching -> "No matches"
-            category == Category.FAVORITES -> "No favorites yet — press X on an app to add one"
+            category == Category.FAVORITES -> "No favourites yet — press X on an app to add one"
             category == Category.FREQUENT -> "Apps you use often will appear here"
             else -> "Nothing in this folder"
         }
-        if (list.isEmpty()) caption.text = ""
+        rebuildDock()
         if (wasGrid) {
             val target = (0 until grid.childCount).map { grid.getChildAt(it) as IconTile }
                 .firstOrNull { it.entry.key == focusedKey } ?: grid.getChildAt(0)
@@ -375,9 +408,19 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun rebuildDock() {
+        dock.removeAllViews()
+        val favs = favorites()
+        apps.filter { it.key in favs }.take(6).forEach { e ->
+            val t = IconTile(this, e, showLabel = false, iconDp = 44).also { wireTile(it) }
+            dock.addView(t, LinearLayout.LayoutParams(dp(64), dp(56)))
+        }
+        dock.visibility = if (dock.childCount > 0 && !searching) View.VISIBLE else View.GONE
+    }
+
     private fun setCategory(c: Category) {
         category = c
-        updateStrip()
+        updatePager()
         homeScroll.scrollTo(0, 0)
         rebuildGrid()
         focusFirst()
@@ -385,74 +428,54 @@ class MainActivity : Activity() {
 
     private fun focusFirst() { grid.getChildAt(0)?.requestFocus() }
 
-    // ───────────────────────── notifications row ─────────────────────────
+    // ───────────────────────── counters (phone / messages / mail) ─────────────────────────
 
     private fun listenerEnabled(): Boolean {
         val s = Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: return false
         return s.split(":").any { ComponentName.unflattenFromString(it)?.packageName == packageName }
     }
 
-    private fun refreshNotifs() {
-        if (!::notifRow.isInitialized) return
-        val hadFocus = notifRow.hasFocus()
-        notifRow.removeAllViews()
-        if (!listenerEnabled()) {
-            val tv = TextView(this).apply {
-                text = "Press A to turn on notification indicators"
-                setTextColor(Theme.TEXT); textSize = 13f; gravity = Gravity.CENTER_VERTICAL
-                isFocusable = true; isClickable = true; tag = "enable"
-                background = focusGlow(this@MainActivity, 10, 1)
-                setPadding(dp(12), 0, dp(12), 0)
-                setOnClickListener { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
-            }
-            notifRow.addView(tv, LinearLayout.LayoutParams(-2, dp(44)))
-            return
-        }
-        val groups = activeNotifs().groupBy { it.packageName }
-        if (groups.isEmpty()) {
-            notifRow.addView(TextView(this).apply {
-                text = "No new notifications"; setTextColor(Theme.TEXT_DIM); textSize = 13f
-                setPadding(dp(8), 0, 0, 0)
-            })
-            return
-        }
-        groups.entries.sortedByDescending { e -> e.value.maxOf { it.postTime } }.take(10).forEach { (pkg, list) ->
-            val icon = try { pm.getApplicationIcon(pkg) } catch (_: Exception) { null }
-            val chip = NotifChip(this, pkg, icon, list.size)
-            chip.setOnClickListener { openNotifs(pkg) }
-            chip.setOnLongClickListener { clearNotifs(pkg); true }
-            val label = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
-            chip.setOnFocusChangeListener { _, has -> if (has) caption.text = "$label  (${list.size})" }
-            notifRow.addView(chip, LinearLayout.LayoutParams(dp(52), dp(48)).apply { setMargins(dp(2), 0, dp(2), 0) })
-        }
-        if (hadFocus) notifRow.getChildAt(0)?.requestFocus()
-    }
-
-    private fun activeNotifs() = HubService.current().filter {
+    private fun activeNotifs(): List<StatusBarNotification> = HubService.current().filter {
         !it.isOngoing && it.packageName != packageName &&
             (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0
     }
 
-    private fun openNotifs(pkg: String) {
-        val latest = activeNotifs().filter { it.packageName == pkg }.maxByOrNull { it.postTime }
-        try {
-            val pi = latest?.notification?.contentIntent
-            if (pi != null) {
-                pi.send()
-                if ((latest.notification.flags and Notification.FLAG_AUTO_CANCEL) != 0) {
-                    HubService.instance?.cancelNotification(latest.key)
-                }
-            } else {
-                pm.getLaunchIntentForPackage(pkg)?.let { startActivity(it) }
-            }
-        } catch (_: Exception) {
-            Toast.makeText(this, "Can't open", Toast.LENGTH_SHORT).show()
+    private fun kindOf(n: StatusBarNotification): String? {
+        val cat = n.notification.category
+        val w = n.packageName.lowercase().split(Regex("[^a-z]+")).toSet()
+        return when {
+            cat == Notification.CATEGORY_CALL || cat == "missed_call" || "dialer" in w || "telecom" in w -> "phone"
+            cat == Notification.CATEGORY_EMAIL || "gm" in w || "email" in w || "outlook" in w || "mail" in w -> "mail"
+            cat == Notification.CATEGORY_MESSAGE || "messaging" in w || "mms" in w || "sms" in w ||
+                "whatsapp" in w || "telegram" in w || "signal" in w || "messenger" in w -> "msg"
+            else -> null
         }
     }
 
-    private fun clearNotifs(pkg: String) {
-        activeNotifs().filter { it.packageName == pkg }.forEach { HubService.instance?.cancelNotification(it.key) }
-        refreshNotifs()
+    private fun refreshCounters() {
+        if (!::phoneChip.isInitialized) return
+        if (!listenerEnabled()) {
+            listOf(phoneChip, msgChip, mailChip).forEach { it.setCount("–") }
+            return
+        }
+        val counts = activeNotifs().mapNotNull { kindOf(it) }.groupingBy { it }.eachCount()
+        phoneChip.setCount((counts["phone"] ?: 0).toString())
+        msgChip.setCount((counts["msg"] ?: 0).toString())
+        mailChip.setCount((counts["mail"] ?: 0).toString())
+    }
+
+    private fun clearCounter(kind: String) {
+        if (!listenerEnabled()) {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            return
+        }
+        activeNotifs().filter { kindOf(it) == kind }.forEach { HubService.instance?.cancelNotification(it.key) }
+        refreshCounters()
+    }
+
+    private fun startFirst(i: Intent) {
+        try { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (_: Exception) { Toast.makeText(this, "No app available", Toast.LENGTH_SHORT).show() }
     }
 
     // ───────────────────────── launching & options ─────────────────────────
@@ -473,10 +496,10 @@ class MainActivity : Activity() {
         val isFav = e.key in favs
         val actions = listOf<Pair<String, () -> Unit>>(
             "Open" to { launch(e) },
-            (if (isFav) "Remove from Favorites" else "Add to Favorites") to {
+            (if (isFav) "Remove from Favourites" else "Add to Favourites") to {
                 if (isFav) favs.remove(e.key) else favs.add(e.key)
                 prefs.edit().putStringSet("favs", favs).apply()
-                if (category == Category.FAVORITES) rebuildGrid()
+                rebuildGrid()
             },
             "App info" to {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", e.pkg, null)))
@@ -580,7 +603,7 @@ class MainActivity : Activity() {
     private fun onOptions() {
         when (val f = currentFocus) {
             is IconTile -> showOptions(f.entry)
-            is NotifChip -> clearNotifs(f.pkg)
+            is CounterChip -> if (f.kind != "search") clearCounter(f.kind)
         }
     }
 

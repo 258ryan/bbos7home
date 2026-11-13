@@ -1,16 +1,16 @@
 # bbos7home — BlackBerry OS 7-style launcher for gamepad devices
 
-An Android home-screen replacement styled after BlackBerry OS 7 (glossy icon grid, notification
-indicator row, focused-item caption, folder strip), built to be driven entirely by a controller.
+An Android home-screen replacement styled after BlackBerry OS 7 (big clock, phone/message/mail counters,
+labelled icon grid, folder pager and dock) using the BB OS 7 theme icons in `app/src/main/assets/bb`, built to be driven entirely by a controller.
 
 | Button | Action |
 |---|---|
 | D-pad / left stick | Move focus |
-| A | Open app / notification |
+| A | Open app / counter |
 | B | Back → "All" folder → top |
-| X | Options (favorite, app info, uninstall) / clear notifications |
+| X | Options (favourite, app info, uninstall) / clear a counter (or enable notification access) |
 | Y or Start | Search (a hardware keyboard also starts search when you type) |
-| L1 / R1 | Previous / next folder (All, Favorites, Media, Games, Downloads, Frequent) |
+| L1 / R1 | Previous / next folder (All Apps, Favourites, Media, Games, Downloads, Frequent) |
 | Select | System settings |
 
 Touch works too (tap, long-press for options, tap folder names).

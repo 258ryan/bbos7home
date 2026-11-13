@@ -2,18 +2,18 @@ package com.example.slatelauncher
 
 import android.content.ComponentName
 import android.content.Context
-import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 
 enum class Category(val title: String) {
-    ALL("All"), FAVORITES("Favorites"), MEDIA("Media"),
+    ALL("All Apps"), FAVORITES("Favourites"), MEDIA("Media"),
     GAMES("Games"), DOWNLOADS("Downloads"), FREQUENT("Frequent")
 }
 
@@ -22,16 +22,19 @@ class AppEntry(
     val component: ComponentName,
     val icon: Drawable,
     val category: Int,
-    val isUser: Boolean
+    val isUser: Boolean,
+    /** Name of the bundled BB OS 7 icon used for this app, if any. */
+    val themed: String?
 ) {
     val pkg: String get() = component.packageName
     val key: String get() = component.flattenToString()
 }
 
-/** Fixed-column grid of equal square cells. Skips GONE children, so focus search works on what you see. */
+/** Fixed-column grid. Skips GONE children, so focus search works on what you see. */
 class TileGrid(ctx: Context) : ViewGroup(ctx) {
     var columns = 4
         set(v) { field = v.coerceAtLeast(1); requestLayout() }
+    var aspect = 1.2f
 
     init { clipChildren = false; clipToPadding = false }
 
@@ -40,75 +43,85 @@ class TileGrid(ctx: Context) : ViewGroup(ctx) {
 
     override fun onMeasure(widthSpec: Int, heightSpec: Int) {
         val width = MeasureSpec.getSize(widthSpec)
-        val cell = width / columns
+        val cw = width / columns
+        val ch = (cw * aspect).toInt()
         val kids = visibleKids()
-        val spec = MeasureSpec.makeMeasureSpec(cell, MeasureSpec.EXACTLY)
-        kids.forEach { it.measure(spec, spec) }
-        val rows = (kids.size + columns - 1) / columns
-        setMeasuredDimension(width, rows * cell)
+        kids.forEach {
+            it.measure(
+                MeasureSpec.makeMeasureSpec(cw, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(ch, MeasureSpec.EXACTLY)
+            )
+        }
+        setMeasuredDimension(width, ((kids.size + columns - 1) / columns) * ch)
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        val cell = (r - l) / columns
+        val cw = (r - l) / columns
+        val ch = (cw * aspect).toInt()
         visibleKids().forEachIndexed { i, v ->
-            val x = (i % columns) * cell
-            val y = (i / columns) * cell
-            v.layout(x, y, x + cell, y + cell)
+            val x = (i % columns) * cw
+            val y = (i / columns) * ch
+            v.layout(x, y, x + cw, y + ch)
         }
     }
 }
 
-/** One app: glossy plate + icon, blue glow when focused. Name is shown in the caption bar. */
-class IconTile(ctx: Context, val entry: AppEntry) : FrameLayout(ctx) {
+/** One app: icon (+ label under it). Blue highlight when focused, like OS 7's selection. */
+class IconTile(ctx: Context, val entry: AppEntry, showLabel: Boolean = true, iconDp: Int = 52) : LinearLayout(ctx) {
     init {
+        orientation = VERTICAL
+        gravity = Gravity.CENTER
         isFocusable = true
         isClickable = true
-        background = focusGlow(ctx)
-        val plate = ImageView(ctx).apply {
-            background = iconPlate(ctx)
+        background = focusGlow(ctx, 12, 2)
+        setPadding(ctx.dp(2), ctx.dp(4), ctx.dp(2), ctx.dp(2))
+        contentDescription = entry.label
+        addView(ImageView(ctx).apply {
             setImageDrawable(entry.icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            val p = ctx.dp(9)
-            setPadding(p, p, p, p)
+        }, LayoutParams(ctx.dp(iconDp), ctx.dp(iconDp)))
+        if (showLabel) {
+            addView(TextView(ctx).apply {
+                text = entry.label
+                textSize = 12f
+                setTextColor(Theme.TEXT)
+                setShadowLayer(3f, 0f, 1f, 0xFF000000.toInt())
+                gravity = Gravity.CENTER
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+                setPadding(0, ctx.dp(3), 0, 0)
+            }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         }
-        addView(plate, LayoutParams(ctx.dp(60), ctx.dp(60), Gravity.CENTER))
-        contentDescription = entry.label
-        val prevFocus = onFocusChangeListener
         setOnFocusChangeListener { v, has ->
-            prevFocus?.onFocusChange(v, has)
-            v.animate().scaleX(if (has) 1.1f else 1f).scaleY(if (has) 1.1f else 1f).setDuration(110).start()
+            val s = if (has) 1.08f else 1f
+            v.animate().scaleX(s).scaleY(s).setDuration(110).start()
         }
     }
 }
 
-/** Notification indicator in the top row (like OS 7's message icons with counts). */
-class NotifChip(ctx: Context, val pkg: String, icon: Drawable?, count: Int) : FrameLayout(ctx) {
+/** Icon + big number in the header row (phone / messages / mail counters). */
+class CounterChip(ctx: Context, icon: Drawable?, val kind: String) : LinearLayout(ctx) {
+    private val count = TextView(ctx)
+
     init {
+        orientation = HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
         isFocusable = true
         isClickable = true
-        tag = pkg
         background = focusGlow(ctx, 10, 1)
-        val img = ImageView(ctx).apply {
+        setPadding(ctx.dp(10), ctx.dp(4), ctx.dp(10), ctx.dp(4))
+        addView(ImageView(ctx).apply {
             if (icon != null) setImageDrawable(icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
+        }, LayoutParams(ctx.dp(30), ctx.dp(30)))
+        count.apply {
+            textSize = 24f
+            setTextColor(Theme.TEXT)
+            setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL))
+            setPadding(ctx.dp(6), 0, 0, 0)
         }
-        addView(img, LayoutParams(ctx.dp(32), ctx.dp(32), Gravity.CENTER))
-        if (count > 1) {
-            val badge = TextView(ctx).apply {
-                text = if (count > 99) "99+" else count.toString()
-                setTextColor(Color.WHITE)
-                textSize = 10f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                gravity = Gravity.CENTER
-                setPadding(ctx.dp(4), 0, ctx.dp(4), 0)
-                minWidth = ctx.dp(16)
-                background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#E0262B")); cornerRadius = ctx.dpf(8f)
-                }
-            }
-            addView(badge, LayoutParams(LayoutParams.WRAP_CONTENT, ctx.dp(16), Gravity.TOP or Gravity.END).apply {
-                topMargin = ctx.dp(4); marginEnd = ctx.dp(2)
-            })
-        }
+        addView(count)
     }
+
+    fun setCount(text: String) { count.text = text }
 }
