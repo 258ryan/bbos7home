@@ -2,6 +2,16 @@ package com.example.slatelauncher
 
 import android.app.Activity
 import android.app.AlarmManager
+import android.app.NotificationManager
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.InsetDrawable
+import android.graphics.drawable.LayerDrawable
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.media.AudioManager
+import android.net.wifi.WifiManager
+import android.os.PowerManager
+import android.text.format.DateUtils
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
@@ -134,7 +144,7 @@ class MainActivity : Activity() {
     override fun onStart() {
         super.onStart()
         updateBattery(registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED)))
-        HubService.onChange = { handler.post { refreshCounters() } }
+        HubService.onChange = { handler.post { refreshCounters(); if (category == Category.HUB) rebuildGrid() } }
         refreshCounters()
         registerReceiver(alarmReceiver, IntentFilter(AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED))
         refreshAlarm()
@@ -145,6 +155,7 @@ class MainActivity : Activity() {
         super.onResume()
         refreshApps()
         refreshCounters()
+        if (category == Category.QUICK) refreshQuick()
         if (!listenerEnabled() && !prefs.getBoolean("hinted", false)) {
             prefs.edit().putBoolean("hinted", true).apply()
             Toast.makeText(this, "Press X on the counters to enable notification counts", Toast.LENGTH_LONG).show()
@@ -232,7 +243,7 @@ class MainActivity : Activity() {
             setOnClickListener { startFirst(Intent(AlarmClock.ACTION_SHOW_ALARMS)) }
         }
         val soundChip = CounterChip(this, BbIcons.drawable(this, "sound"), "sound").apply {
-            setOnClickListener { startFirst(Intent(Settings.ACTION_SOUND_SETTINGS)) }
+            setOnClickListener { setCategory(Category.QUICK) }
         }
         val counters = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -401,6 +412,8 @@ class MainActivity : Activity() {
         hintBar.removeAllViews()
         val items = when {
             searching -> listOf("A" to "Go", "B" to "Cancel")
+            category == Category.HUB -> listOf("A" to "Open", "X" to "Options", "B" to "Back", "L1/R1" to "Folders")
+            category == Category.QUICK -> listOf("A" to "Change", "X" to "Lower", "B" to "Back", "L1/R1" to "Folders")
             category == Category.WIDGETS -> listOf("A" to "Add", "X" to "Options", "B" to "Back", "L1/R1" to "Folders")
             expanded -> listOf("A" to "Open", "X" to "Options", "B" to "Collapse", "L1/R1" to "Folders")
             else -> listOf("A" to "Open", "X" to "Options", "↓" to "All apps", "L1/R1" to "Folders")
@@ -445,7 +458,7 @@ class MainActivity : Activity() {
                     AppEntry(
                         label,
                         ComponentName(it.activityInfo.packageName, it.activityInfo.name),
-                        (themed?.let { n -> BbIcons.drawable(this, n) }) ?: it.loadIcon(pm),
+                        (themed?.let { n -> BbIcons.drawable(this, n) }) ?: platedIcon(it.loadIcon(pm)),
                         ai.category,
                         (ai.flags and ApplicationInfo.FLAG_SYSTEM) == 0,
                         themed
@@ -463,6 +476,10 @@ class MainActivity : Activity() {
             }
         }.start()
     }
+
+    /** Apps without a bundled BB icon get their own icon on the glossy OS 7 plate. */
+    private fun platedIcon(icon: Drawable): Drawable =
+        LayerDrawable(arrayOf(iconPlate(this), InsetDrawable(icon, 0.16f)))
 
     // Favourites are an ordered list; they form the first bar in "All", like OS 7's pinned row.
     private fun favorites(): MutableList<String> =
@@ -517,7 +534,7 @@ class MainActivity : Activity() {
             Category.MEDIA -> listOf(null to apps.filter { isMedia(it) })
             Category.GAMES -> listOf(null to apps.filter { isGame(it) })
             Category.DOWNLOADS -> listOf(null to apps.filter { it.isUser })
-            Category.WIDGETS -> emptyList()
+            Category.WIDGETS, Category.HUB, Category.QUICK -> emptyList()
         }
         return out.filter { it.second.isNotEmpty() }
     }
@@ -549,7 +566,9 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun isFull() = expanded || searching || category == Category.WIDGETS
+    private fun isPanel() = category == Category.WIDGETS || category == Category.HUB || category == Category.QUICK
+
+    private fun isFull() = expanded || searching || isPanel()
 
     private fun allTiles(): List<IconTile> =
         if (isFull()) (0 until gridHost.childCount).map { gridHost.getChildAt(it) }
@@ -559,14 +578,16 @@ class MainActivity : Activity() {
     private fun rebuildGrid() {
         if (!::root.isInitialized) return
         val focus = currentFocus
-        val wasGrid = focus == null || focus is IconTile || focus is WidgetFrame || focus?.tag == "addwidget"
+        val wasGrid = focus == null || focus is IconTile || focus is WidgetFrame || focus is HubRow ||
+            focus is QuickTile || focus?.tag == "addwidget"
+        val panelIdx = if (focus?.parent === gridHost) gridHost.indexOfChild(focus) else -1
         val focusedKey = (focus as? IconTile)?.entry?.key
         barRow.removeAllViews()
         gridHost.removeAllViews()
         val secs = sections()
         val flat = secs.flatMap { it.second }
-        if (category == Category.WIDGETS && !searching) {
-            buildWidgetPanel()
+        if (isPanel() && !searching) {
+            buildPanel()
         } else if (expanded || searching) {
             secs.forEach { (title, list) ->
                 if (title != null) gridHost.addView(sectionHeader(title))
@@ -578,8 +599,8 @@ class MainActivity : Activity() {
             val w = dp(barCellDp)
             flat.forEach { barRow.addView(makeTile(it, bar = true), LinearLayout.LayoutParams(w, (w * 1.2f).toInt())) }
         }
-        val widgets = category == Category.WIDGETS && !searching
-        emptyText.visibility = if (flat.isEmpty() && !widgets) View.VISIBLE else View.GONE
+        val panel = isPanel() && !searching
+        emptyText.visibility = if (flat.isEmpty() && !panel) View.VISIBLE else View.GONE
         emptyText.text = when {
             searching -> "No matches"
             category == Category.FAVORITES -> "No favourites yet — press X on an app to add one"
@@ -587,8 +608,9 @@ class MainActivity : Activity() {
             else -> "Nothing in this folder"
         }
         if (flat.isEmpty()) { caption.text = ""; captionFloat.text = "" }
-        if (wasGrid && widgets) {
-            gridHost.getChildAt(0)?.requestFocus()
+        if (wasGrid && panel) {
+            val keep = if (panelIdx >= 0) gridHost.getChildAt(panelIdx.coerceAtMost(gridHost.childCount - 1)) else null
+            (keep?.takeIf { it.isFocusable } ?: firstFocusableIn(gridHost))?.requestFocus()
         } else if (wasGrid) {
             val tiles = allTiles()
             (tiles.firstOrNull { it.entry.key == focusedKey } ?: tiles.firstOrNull())?.requestFocus()
@@ -606,7 +628,7 @@ class MainActivity : Activity() {
     }
 
     private fun focusFirst() {
-        if (category == Category.WIDGETS && !searching) gridHost.getChildAt(0)?.requestFocus()
+        if (isPanel() && !searching) firstFocusableIn(gridHost)?.requestFocus()
         else allTiles().firstOrNull()?.requestFocus()
     }
 
@@ -617,6 +639,236 @@ class MainActivity : Activity() {
         rebuildGrid()
         homeScroll.scrollTo(0, 0)
         barScroll.scrollTo(0, 0)
+    }
+
+    // ───────────────────────── panels: Hub & Quick Settings ─────────────────────────
+
+    private fun firstFocusableIn(v: View): View? {
+        if (v.isFocusable) return v
+        if (v is ViewGroup) for (i in 0 until v.childCount) firstFocusableIn(v.getChildAt(i))?.let { return it }
+        return null
+    }
+
+    private fun buildPanel() {
+        when (category) {
+            Category.WIDGETS -> buildWidgetPanel()
+            Category.HUB -> buildHubPanel()
+            Category.QUICK -> buildQuickPanel()
+            else -> {}
+        }
+    }
+
+    private fun rowLp() = LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(8), dp(3), dp(8), dp(3)) }
+
+    // ── Hub: every notification in one list ──
+
+    private fun buildHubPanel() {
+        if (!listenerEnabled()) {
+            val row = HubRow(this, BbIcons.drawable(this, "settings"), "Notification access is off",
+                "Press A to turn it on so notifications appear here.", "", null)
+            row.setOnClickListener { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            gridHost.addView(row, rowLp())
+            return
+        }
+        val list = activeNotifs().sortedByDescending { it.postTime }
+        if (list.isEmpty()) {
+            gridHost.addView(TextView(this).apply {
+                text = "No new notifications"; textSize = 15f; setTextColor(Theme.TEXT_DIM)
+                gravity = Gravity.CENTER; setPadding(dp(16), dp(32), dp(16), dp(32))
+            }, LinearLayout.LayoutParams(-1, -2))
+            return
+        }
+        val now = System.currentTimeMillis()
+        list.forEach { n ->
+            val ex = n.notification.extras
+            val title = ex?.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: appLabel(n.packageName)
+            val body = (ex?.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex?.getCharSequence(Notification.EXTRA_TEXT))?.toString() ?: ""
+            val icon = try { pm.getApplicationIcon(n.packageName) } catch (_: Exception) { null }
+            val meta = appLabel(n.packageName) + "  ·  " +
+                DateUtils.getRelativeTimeSpanString(n.postTime, now, DateUtils.MINUTE_IN_MILLIS)
+            val row = HubRow(this, icon, title, body, meta, n.key)
+            row.setOnClickListener { openNotification(n.key) }
+            row.setOnLongClickListener { showHubMenu(n.key); true }
+            gridHost.addView(row, rowLp())
+        }
+    }
+
+    private fun openNotification(key: String) {
+        val n = activeNotifs().firstOrNull { it.key == key } ?: return
+        try {
+            val pi = n.notification.contentIntent
+            if (pi != null) pi.send()
+            else pm.getLaunchIntentForPackage(n.packageName)?.let { startActivity(it) }
+            if ((n.notification.flags and Notification.FLAG_AUTO_CANCEL) != 0) HubService.instance?.cancelNotification(key)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Can't open", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showHubMenu(key: String) {
+        val n = activeNotifs().firstOrNull { it.key == key } ?: return
+        val pkg = n.packageName
+        showMenu(appLabel(pkg), listOf<Pair<String, () -> Unit>>(
+            "Open" to { openNotification(key) },
+            "Dismiss" to { HubService.instance?.cancelNotification(key) },
+            "Dismiss all from ${appLabel(pkg)}" to {
+                activeNotifs().filter { it.packageName == pkg }.forEach { HubService.instance?.cancelNotification(it.key) }
+            },
+            "Clear all notifications" to { HubService.instance?.cancelAllNotifications() }
+        ))
+    }
+
+    // ── Quick Settings: toggles that Android lets a launcher change ──
+
+    private val quickIds = listOf("sound", "volume", "brightness", "wifi", "bluetooth", "airplane", "dnd",
+        "rotation", "torch", "battery", "settings")
+    private val quickTiles = HashMap<String, QuickTile>()
+    private var torchOn = false
+
+    private fun audio() = getSystemService(AUDIO_SERVICE) as AudioManager
+
+    private fun quickMeta(id: String): Triple<String, String?, String?> = when (id) {
+        "sound" -> Triple("Sound profile", "sound", null)
+        "volume" -> Triple("Media volume", "music", null)
+        "brightness" -> Triple("Brightness", null, "☀")
+        "wifi" -> Triple("Wi-Fi", "wifi", null)
+        "bluetooth" -> Triple("Bluetooth", "bluetooth", null)
+        "airplane" -> Triple("Airplane mode", "airplane", null)
+        "dnd" -> Triple("Do not disturb", "dnd", null)
+        "rotation" -> Triple("Rotation", null, "⟳")
+        "torch" -> Triple("Flashlight", null, "🔦")
+        "battery" -> Triple("Battery saver", null, "🔋")
+        else -> Triple("All settings", "settings", null)
+    }
+
+    private fun buildQuickPanel() {
+        quickTiles.clear()
+        val g = TileGrid(this).apply {
+            columns = (resources.configuration.screenWidthDp / 100).coerceIn(3, 6)
+            aspect = 1.15f
+        }
+        quickIds.forEach { id ->
+            val (title, icon, glyph) = quickMeta(id)
+            val t = QuickTile(this, id, title, icon, glyph)
+            t.setOnClickListener { quickPrimary(id); refreshQuick() }
+            t.setOnLongClickListener { quickSecondary(id); refreshQuick(); true }
+            quickTiles[id] = t
+            g.addView(t)
+        }
+        gridHost.addView(g, LinearLayout.LayoutParams(-1, -2))
+        refreshQuick()
+    }
+
+    private fun refreshQuick() {
+        quickTiles.forEach { (id, t) ->
+            t.setState(quickState(id))
+            if (id == "sound") t.setIcon(when (audio().ringerMode) {
+                AudioManager.RINGER_MODE_NORMAL -> "sound"
+                AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
+                else -> "mute"
+            })
+        }
+    }
+
+    private fun dndOff(nm: NotificationManager) =
+        nm.currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_ALL ||
+            nm.currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_UNKNOWN
+
+    private fun quickState(id: String): String = when (id) {
+        "sound" -> when (audio().ringerMode) {
+            AudioManager.RINGER_MODE_NORMAL -> "Normal"
+            AudioManager.RINGER_MODE_VIBRATE -> "Vibrate"
+            else -> "Silent"
+        }
+        "volume" -> {
+            val a = audio()
+            val max = a.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+            "${a.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / max}%"
+        }
+        "brightness" -> "${Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128) * 100 / 255}%"
+        "wifi" -> if ((applicationContext.getSystemService(WIFI_SERVICE) as WifiManager).isWifiEnabled) "On" else "Off"
+        "airplane" -> if (Settings.Global.getInt(contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) == 1) "On" else "Off"
+        "dnd" -> if (dndOff(getSystemService(NOTIFICATION_SERVICE) as NotificationManager)) "Off" else "On"
+        "rotation" -> if (Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 1) == 1) "Auto" else "Locked"
+        "torch" -> if (torchOn) "On" else "Off"
+        "battery" -> if ((getSystemService(POWER_SERVICE) as PowerManager).isPowerSaveMode) "On" else "Off"
+        else -> ""
+    }
+
+    private fun askWriteSettings() {
+        Toast.makeText(this, "Allow \"Modify system settings\" for Slate Launcher", Toast.LENGTH_LONG).show()
+        startFirst(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
+    }
+
+    private fun adjustBrightness(delta: Int) {
+        if (!Settings.System.canWrite(this)) { askWriteSettings(); return }
+        val cur = Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
+        val next = if (delta > 0 && cur >= 255) 8 else (cur + delta).coerceIn(8, 255)
+        Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
+        Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, next)
+    }
+
+    private fun stepVolume(up: Boolean) {
+        val a = audio()
+        val max = a.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val cur = a.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val step = maxOf(1, max / 10)
+        val next = if (up) (if (cur >= max) 0 else minOf(max, cur + step)) else maxOf(0, cur - step)
+        a.setStreamVolume(AudioManager.STREAM_MUSIC, next, 0)
+    }
+
+    private fun toggleTorch() {
+        val cm = getSystemService(CAMERA_SERVICE) as CameraManager
+        val id = try {
+            cm.cameraIdList.firstOrNull { cm.getCameraCharacteristics(it).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true }
+        } catch (_: Exception) { null }
+        if (id == null) { Toast.makeText(this, "No flashlight", Toast.LENGTH_SHORT).show(); return }
+        val want = !torchOn
+        try { cm.setTorchMode(id, want); torchOn = want } catch (_: Exception) {}
+    }
+
+    private fun quickPrimary(id: String) {
+        when (id) {
+            "sound" -> {
+                val a = audio()
+                val next = when (a.ringerMode) {
+                    AudioManager.RINGER_MODE_NORMAL -> AudioManager.RINGER_MODE_VIBRATE
+                    AudioManager.RINGER_MODE_VIBRATE -> AudioManager.RINGER_MODE_SILENT
+                    else -> AudioManager.RINGER_MODE_NORMAL
+                }
+                try { a.ringerMode = next } catch (_: SecurityException) {
+                    Toast.makeText(this, "Allow Do Not Disturb access to use Silent", Toast.LENGTH_LONG).show()
+                    startFirst(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                }
+            }
+            "volume" -> stepVolume(true)
+            "brightness" -> adjustBrightness(32)
+            "wifi" -> startFirst(if (Build.VERSION.SDK_INT >= 29) Intent(Settings.Panel.ACTION_WIFI) else Intent(Settings.ACTION_WIFI_SETTINGS))
+            "bluetooth" -> startFirst(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            "airplane" -> startFirst(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS))
+            "dnd" -> {
+                val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                if (nm.isNotificationPolicyAccessGranted) {
+                    nm.setInterruptionFilter(
+                        if (dndOff(nm)) NotificationManager.INTERRUPTION_FILTER_PRIORITY else NotificationManager.INTERRUPTION_FILTER_ALL
+                    )
+                } else startFirst(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+            }
+            "rotation" -> if (!Settings.System.canWrite(this)) askWriteSettings() else {
+                val cur = Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 1)
+                Settings.System.putInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 1 - cur)
+            }
+            "torch" -> toggleTorch()
+            "battery" -> startFirst(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS))
+            else -> startFirst(Intent(Settings.ACTION_SETTINGS))
+        }
+    }
+
+    private fun quickSecondary(id: String) {
+        when (id) {
+            "volume" -> stepVolume(false)
+            "brightness" -> adjustBrightness(-32)
+        }
     }
 
     // ───────────────────────── alarm indicator ─────────────────────────
@@ -922,6 +1174,8 @@ class MainActivity : Activity() {
         when (val f = currentFocus) {
             is IconTile -> showOptions(f.entry)
             is WidgetFrame -> showWidgetMenu(f.widgetId)
+            is HubRow -> f.key?.let { showHubMenu(it) }
+            is QuickTile -> { quickSecondary(f.id); refreshQuick() }
             is TextView -> if (f.tag == "addwidget") showWidgetPicker()
             is CounterChip -> if (f.kind != "search") clearCounter(f.kind)
         }

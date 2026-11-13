@@ -2,6 +2,7 @@ package com.example.slatelauncher
 
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.text.TextUtils
 import android.view.Gravity
@@ -14,7 +15,7 @@ import android.widget.TextView
 
 enum class Category(val title: String) {
     ALL("All"), FAVORITES("Favourites"), FREQUENT("Frequent"),
-    MEDIA("Media"), GAMES("Games"), DOWNLOADS("Downloads"), WIDGETS("Widgets")
+    MEDIA("Media"), GAMES("Games"), DOWNLOADS("Downloads"), WIDGETS("Widgets"), HUB("Hub"), QUICK("Quick Settings")
 }
 
 class AppEntry(
@@ -132,5 +133,75 @@ class WidgetFrame(ctx: Context, val widgetId: Int) : FrameLayout(ctx) {
         descendantFocusability = FOCUS_BLOCK_DESCENDANTS
         background = focusGlow(ctx, 8, 0)
         setPadding(ctx.dp(3), ctx.dp(3), ctx.dp(3), ctx.dp(3))
+    }
+}
+
+/** One notification in the Hub panel. [key] is the notification key (null for info rows). */
+class HubRow(
+    ctx: Context, icon: Drawable?, title: String, body: String, meta: String, val key: String?
+) : LinearLayout(ctx) {
+    init {
+        orientation = HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        isFocusable = true
+        isClickable = true
+        background = focusGlow(ctx, 8, 1)
+        setPadding(ctx.dp(10), ctx.dp(8), ctx.dp(10), ctx.dp(8))
+        addView(ImageView(ctx).apply {
+            if (icon != null) setImageDrawable(icon)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, LayoutParams(ctx.dp(40), ctx.dp(40)))
+        val col = LinearLayout(ctx).apply { orientation = VERTICAL; setPadding(ctx.dp(12), 0, 0, 0) }
+        col.addView(TextView(ctx).apply {
+            text = title; textSize = 16f; setTextColor(Theme.TEXT)
+            setTypeface(typeface, Typeface.BOLD); maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+        })
+        if (body.isNotEmpty()) col.addView(TextView(ctx).apply {
+            text = body; textSize = 14f; setTextColor(Theme.TEXT_DIM)
+            maxLines = 2; ellipsize = TextUtils.TruncateAt.END
+        })
+        if (meta.isNotEmpty()) col.addView(TextView(ctx).apply {
+            text = meta; textSize = 12f; setTextColor(Theme.BLUE_LIGHT); maxLines = 1
+        })
+        addView(col, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+    }
+}
+
+/** A quick-settings tile: glossy plate with icon (or glyph), title and state. */
+class QuickTile(ctx: Context, val id: String, title: String, iconName: String?, glyph: String?) : LinearLayout(ctx) {
+    private val iconView = ImageView(ctx)
+    private val stateView = TextView(ctx)
+
+    init {
+        orientation = VERTICAL
+        gravity = Gravity.CENTER
+        isFocusable = true
+        isClickable = true
+        background = focusGlow(ctx, 8, 3)
+        val plate = FrameLayout(ctx).apply { background = iconPlate(ctx) }
+        if (iconName != null) {
+            iconView.setImageDrawable(BbIcons.drawable(ctx, iconName))
+            iconView.scaleType = ImageView.ScaleType.FIT_CENTER
+            val p = ctx.dp(6)
+            iconView.setPadding(p, p, p, p)
+            plate.addView(iconView, FrameLayout.LayoutParams(-1, -1))
+        } else {
+            plate.addView(TextView(ctx).apply {
+                text = glyph; textSize = 26f; setTextColor(Theme.TEXT); gravity = Gravity.CENTER
+            }, FrameLayout.LayoutParams(-1, -1))
+        }
+        addView(plate, LayoutParams(ctx.dp(54), ctx.dp(54)))
+        addView(TextView(ctx).apply {
+            text = title; textSize = 12f; setTextColor(Theme.TEXT); gravity = Gravity.CENTER
+            maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(ctx.dp(2), ctx.dp(4), ctx.dp(2), 0)
+        }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        stateView.apply { textSize = 11f; setTextColor(Theme.BLUE_LIGHT); gravity = Gravity.CENTER; maxLines = 1 }
+        addView(stateView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+    }
+
+    fun setState(text: String) { stateView.text = text }
+
+    fun setIcon(name: String) {
+        BbIcons.drawable(context, name)?.let { iconView.setImageDrawable(it) }
     }
 }
