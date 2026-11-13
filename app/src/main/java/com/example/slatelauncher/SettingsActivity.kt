@@ -74,6 +74,9 @@ class SettingsActivity : Activity() {
         Cat("appearance", "Appearance", "ui:elem_preferences-desktop-wallpaper") { listOf(
             Item.Action("Wallpaper", "Built-in wallpapers or your own picture") { wallpaperDialog() },
             Item.Seek("Dim behind panels", 40, 100, 5, "%", { Prefs.int(this, Prefs.DIM, 92) }, { Prefs.set(this, Prefs.DIM, it) }),
+            Item.Choice("Animations", "Full: pops, springs, zoom launches. Light: short fades. Off: none", {
+                Prefs.int(this, Prefs.ANIM, 2).toString()
+            }, { listOf("2" to "Full", "1" to "Light", "0" to "Off") }, { Prefs.set(this, Prefs.ANIM, it.toInt()) }),
             toggle("Leather and metal textures", "Turn off for a flatter, faster look", Prefs.TEXTURES, true),
             Item.Choice("Grid columns", "How many icons across", {
                 Prefs.int(this, Prefs.COLS, 0).toString()

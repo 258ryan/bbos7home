@@ -51,6 +51,55 @@ object Materials {
         }
     }
 
+    /** Green baize, like the original Game Center table. */
+    fun felt(): Bitmap {
+        val s = 96
+        return make("felt", s) { x, y, rnd ->
+            val t = 2.0 * PI / s
+            val fibre = 4.0 * sin(t * 9 * x + 2.0 * sin(t * 4 * y)) * sin(t * 7 * y)
+            val n = rnd.nextInt(16) - 8 + fibre.toInt()
+            Color.rgb((0x1B + n / 2).coerceIn(0, 255), (0x5A + n).coerceIn(0, 255), (0x35 + n / 2).coerceIn(0, 255))
+        }
+    }
+
+    /** Warm wood with horizontal grain (tiles seamlessly along x). */
+    fun wood(): Bitmap {
+        val w = 128; val h = 64
+        val rows = DoubleArray(h).also { r -> val rnd = Random(5); for (i in r.indices) r[i] = rnd.nextDouble() }
+        val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val a = IntArray(w * h)
+        for (y in 0 until h) for (x in 0 until w) {
+            val ring = 0.5 + 0.5 * sin(2 * PI * (y * 2.0 / h + 0.15 * sin(2 * PI * x * 2.0 / w) + rows[y] * 0.25))
+            val v = 0.62 + 0.28 * ring + (rows[(y * 7) % h] - 0.5) * 0.12
+            a[y * w + x] = Color.rgb((0x6E * v).toInt().coerceIn(0, 255), (0x46 * v).toInt().coerceIn(0, 255), (0x24 * v).toInt().coerceIn(0, 255))
+        }
+        b.setPixels(a, 0, w, 0, 0, w, h)
+        return cache.getOrPut("wood") { b }
+    }
+
+    /** Felt panel: baize with a soft vignette. */
+    fun feltPanel(ctx: Context): Drawable {
+        if (!enabled) return flat(0xFF1F6A3B.toInt(), 0xFF123F23.toInt())
+        val vig = GradientDrawable().apply {
+            gradientType = GradientDrawable.RADIAL_GRADIENT
+            gradientRadius = ctx.dpf(520f)
+            setGradientCenter(0.5f, 0.35f)
+            colors = intArrayOf(0x00000000, 0x99000000.toInt())
+        }
+        return LayerDrawable(arrayOf(tiled(ctx, felt()), vig))
+    }
+
+    /** Wood rail with a lit top edge and a shadowed lower edge. */
+    fun woodRail(ctx: Context): Drawable {
+        if (!enabled) return flat(0xFF7A4F2A.toInt(), 0xFF3E2512.toInt())
+        return LayerDrawable(arrayOf(tiled(ctx, wood()), shade(0x40FFFFFF, 0x77000000)))
+    }
+
+    /** A soft drop-shadow strip to place under a bar. */
+    fun shadowStrip(): Drawable = shade(0x66000000, 0x00000000)
+
+    fun shadowStripView(ctx: Context): android.view.View = android.view.View(ctx).apply { background = shadowStrip() }
+
     /** Horizontally brushed steel. */
     fun brushed(): Bitmap {
         val s = 64
@@ -150,6 +199,8 @@ class GelDrawable(
 
 /** Bevelled chrome plate / keycap: soft drop shadow, steel gradient, specular top half, dark outline. */
 class ChromeDrawable(ctx: Context, radiusDp: Float, private val dark: Boolean = false) : MatDrawable() {
+    /** Off while a key is pressed down, so it sits flat on the board. */
+    var shadowOn = true
     private val d = ctx.dpf(1f)
     private val r = ctx.dpf(radiusDp)
     private val rect = RectF()
@@ -161,7 +212,7 @@ class ChromeDrawable(ctx: Context, radiusDp: Float, private val dark: Boolean = 
         rect.set(b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom - sh)
         p.shader = null; p.style = Paint.Style.FILL
         // soft drop shadow: three offset, fading copies
-        for (i in 3 downTo 1) {
+        if (shadowOn) for (i in 3 downTo 1) {
             p.color = Color.argb(34, 0, 0, 0)
             c.drawRoundRect(rect.left, rect.top + i * d * 0.9f, rect.right, rect.bottom + i * d * 0.9f, r, r, p)
         }
@@ -202,5 +253,36 @@ class GlassBarDrawable(ctx: Context) : MatDrawable() {
         c.drawRect(rect.left, rect.top, rect.right, rect.top + d, p)
         p.color = 0xAA000000.toInt()
         c.drawRect(rect.left, rect.bottom - d, rect.right, rect.bottom, p)
+    }
+}
+
+/** A game case standing on the felt: soft shadow, dark plastic body, bevelled spine on the left. */
+class CaseDrawable(ctx: Context) : MatDrawable() {
+    private val d = ctx.dpf(1f)
+    private val body = RectF()
+    private val spine = RectF()
+
+    override fun draw(c: Canvas) {
+        val b = bounds
+        body.set(b.left + 2 * d, b.top + 2 * d, b.right - 2 * d, b.bottom - 6 * d)
+        p.shader = null; p.style = Paint.Style.FILL
+        for (i in 5 downTo 1) {
+            p.color = Color.argb(34, 0, 0, 0)
+            c.drawRoundRect(body.left - i * d * 0.6f, body.top + i * d * 1.1f, body.right + i * d * 0.6f, body.bottom + i * d * 1.3f, 5 * d, 5 * d, p)
+        }
+        p.shader = gradient(body, 0xFF3A3D42.toInt(), 0xFF0B0C0D.toInt())
+        c.drawRoundRect(body, 3 * d, 3 * d, p)
+        spine.set(body.left, body.top, body.left + 8 * d, body.bottom)
+        p.shader = LinearGradient(spine.left, 0f, spine.right, 0f, 0xFF62666D.toInt(), 0xFF141618.toInt(), Shader.TileMode.CLAMP)
+        c.drawRoundRect(spine, 3 * d, 3 * d, p)
+        p.shader = null
+        p.color = 0x66FFFFFF
+        c.drawRect(spine.left + d, spine.top + 3 * d, spine.left + 1.8f * d, spine.bottom - 3 * d, p)
+        p.style = Paint.Style.STROKE; p.strokeWidth = d
+        p.color = 0x33FFFFFF
+        c.drawRoundRect(body.left + 1.5f * d, body.top + 1.5f * d, body.right - 1.5f * d, body.bottom - 1.5f * d, 3 * d, 3 * d, p)
+        p.color = 0xFF050506.toInt()
+        c.drawRoundRect(body.left + 0.5f * d, body.top + 0.5f * d, body.right - 0.5f * d, body.bottom - 0.5f * d, 3 * d, 3 * d, p)
+        p.style = Paint.Style.FILL
     }
 }

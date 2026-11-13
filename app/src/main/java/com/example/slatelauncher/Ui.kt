@@ -40,6 +40,7 @@ fun focusGlow(ctx: Context, radiusDp: Int = 6, insetDp: Int = 2): Drawable {
         addState(intArrayOf(android.R.attr.state_focused), gel)
         addState(intArrayOf(android.R.attr.state_pressed), gel)
         addState(intArrayOf(), ColorDrawable(Color.TRANSPARENT))
+        if (Anim.level(ctx) > 0) { setEnterFadeDuration(110); setExitFadeDuration(200) }
     }
     return InsetDrawable(sl, ctx.dp(insetDp))
 }

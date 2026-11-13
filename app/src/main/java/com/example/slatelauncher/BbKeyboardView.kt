@@ -1,7 +1,9 @@
 package com.example.slatelauncher
 
 import android.content.Context
+import android.animation.ValueAnimator
 import android.graphics.Canvas
+import android.view.animation.OvershootInterpolator
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
@@ -61,6 +63,25 @@ class BbKeyboardView(ctx: Context) : View(ctx) {
     private val metalPaint = Paint().apply {
         shader = android.graphics.BitmapShader(Materials.brushed(), android.graphics.Shader.TileMode.REPEAT, android.graphics.Shader.TileMode.REPEAT)
         alpha = 150
+    }
+
+    // ── motion: the highlighted key lifts with a little overshoot, a pressed key sinks and springs back ──
+    private var liftValue = 1f
+    private var pressDepth = 0f
+    private val liftAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = 140; interpolator = OvershootInterpolator(2.4f)
+        addUpdateListener { liftValue = it.animatedValue as Float; invalidate() }
+    }
+    private val pressAnim = ValueAnimator.ofFloat(0f, 1f, 0f).apply {
+        duration = 200
+        addUpdateListener { pressDepth = it.animatedValue as Float; invalidate() }
+    }
+    private val ledPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    private fun animOn() = Anim.level(context) > 0
+
+    private fun lift() {
+        if (animOn()) { liftAnim.cancel(); liftValue = 0f; liftAnim.start() } else liftValue = 1f
     }
 
     init { isFocusable = false; rebuild() }
@@ -163,6 +184,7 @@ class BbKeyboardView(ctx: Context) : View(ctx) {
             val n = rowSize(fr)
             if (n > 0) fc = (fc + dx + n) % n
         }
+        lift()
         invalidate()
     }
 
@@ -170,7 +192,8 @@ class BbKeyboardView(ctx: Context) : View(ctx) {
         playSoundEffect(SoundEffectConstants.CLICK)
         performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         pressed = fr to fc
-        postDelayed({ pressed = null; invalidate() }, 90)
+        if (animOn()) { pressAnim.cancel(); pressAnim.start() } else pressDepth = 1f
+        postDelayed({ pressed = null; pressDepth = 0f; invalidate() }, if (animOn()) 210L else 90L)
         invalidate()
         if (fr < 0) {
             suggestions.getOrNull(fc)?.let { listener?.onSuggestion(it) }
@@ -230,7 +253,16 @@ class BbKeyboardView(ctx: Context) : View(ctx) {
         )
         c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
         c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), metalPaint)
-        c.drawLine(0f, 0f, width.toFloat(), 0f, linePaint)
+        // housing: lit top edge, side bezels, shaded bottom
+        val dn = context.resources.displayMetrics.density
+        bgPaint.shader = null
+        bgPaint.color = 0x88FFFFFF.toInt(); c.drawRect(0f, 0f, width.toFloat(), dn, bgPaint)
+        bgPaint.color = 0x99000000.toInt(); c.drawRect(0f, dn, width.toFloat(), 2 * dn, bgPaint)
+        bgPaint.color = 0x33FFFFFF; c.drawRect(0f, 0f, dn, height.toFloat(), bgPaint)
+        bgPaint.color = 0x66000000; c.drawRect(width - dn, 0f, width.toFloat(), height.toFloat(), bgPaint)
+        bgPaint.shader = android.graphics.LinearGradient(0f, height - 10 * dn, 0f, height.toFloat(), 0x00000000, 0x77000000, android.graphics.Shader.TileMode.CLAMP)
+        c.drawRect(0f, height - 10 * dn, width.toFloat(), height.toFloat(), bgPaint)
+        bgPaint.shader = null
 
         // Suggestion strip
         val cell = width / 3f
@@ -245,41 +277,69 @@ class BbKeyboardView(ctx: Context) : View(ctx) {
         }
         c.drawLine(0f, stripH.toFloat(), width.toFloat(), stripH.toFloat(), linePaint)
 
-        // Keys
-        rows.forEachIndexed { ri, row ->
-            row.forEachIndexed { ci, k ->
-                val r = rects[ri][ci]
-                val focused = fr == ri && fc == ci
-                val d = when {
-                    focused -> keyFocus
-                    k.act == Act.CHAR || k.act == Act.SPACE -> keyNormal
-                    else -> keySpecial
-                }
-                d.setBounds(r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt())
-                d.draw(c)
-                if (!focused) {
-                    gloss.setBounds(r.left.toInt() + 1, r.top.toInt() + 1, r.right.toInt() - 1, (r.top + r.height() / 2f).toInt())
-                    gloss.draw(c)
-                }
-                val isPressed = pressed == (ri to ci)
-                val lit = k.act == Act.SHIFT && (shifted || caps)
-                val color = if (lit && !focused) Theme.BLUE_LIGHT else Color.WHITE
-                val label = display(k)
-                val size = when {
-                    k.act == Act.CHAR && k.label.codePointCount(0, k.label.length) == 1 && k.label[0].isLetterOrDigit() -> 22f
-                    k.act == Act.CHAR -> 22f
-                    k.act == Act.ENTER && label.length > 1 -> 13f
-                    else -> 16f
-                }
-                if (label.isNotEmpty()) centeredText(c, label, r, size, color)
-                if (k.act == Act.SHIFT && caps) c.drawLine(r.centerX() - 10, r.bottom - 8, r.centerX() + 10, r.bottom - 8, textPaint)
-                if (isPressed) {
-                    textPaint.color = Color.parseColor("#33FFFFFF")
-                    c.drawRoundRect(r, 6f, 6f, textPaint.also { it.style = Paint.Style.FILL })
-                    textPaint.color = Color.WHITE
-                }
-            }
+        // inner shadow under the suggestion strip
+        bgPaint.shader = android.graphics.LinearGradient(0f, stripH.toFloat(), 0f, stripH + 7 * dn, 0x66000000, 0x00000000, android.graphics.Shader.TileMode.CLAMP)
+        c.drawRect(0f, stripH.toFloat(), width.toFloat(), stripH + 7 * dn, bgPaint)
+        bgPaint.shader = null
+
+        // Keys: resting keys first, the highlighted one last so its lift draws over its neighbours
+        rows.forEachIndexed { ri, row -> row.forEachIndexed { ci, k -> if (!(fr == ri && fc == ci)) drawKey(c, ri, ci, k, dn) } }
+        if (fr >= 0 && fr < rows.size && fc < rows[fr].size) drawKey(c, fr, fc, rows[fr][fc], dn)
+    }
+
+    private fun drawKey(c: Canvas, ri: Int, ci: Int, k: Key, dn: Float) {
+        val r = rects[ri][ci]
+        val focused = fr == ri && fc == ci
+        val depth = if (pressed == (ri to ci)) pressDepth else 0f
+        val lift = if (focused) liftValue else 0f
+        c.save()
+        val sc = 1f + 0.10f * lift - 0.06f * depth
+        c.scale(sc, sc, r.centerX(), r.centerY())
+        c.translate(0f, depth * dn * 1.5f - lift * dn * 1.5f)
+        val d = when {
+            focused -> keyFocus
+            k.act == Act.CHAR || k.act == Act.SPACE -> keyNormal
+            else -> keySpecial
         }
+        (d as? ChromeDrawable)?.shadowOn = depth < 0.4f
+        d.setBounds(r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt())
+        d.draw(c)
+        val lit = k.act == Act.SHIFT && (shifted || caps)
+        val color = if (lit && !focused) Theme.BLUE_LIGHT else Color.WHITE
+        val label = display(k)
+        val size = when {
+            k.act == Act.CHAR -> 22f
+            k.act == Act.ENTER && label.length > 1 -> 13f
+            else -> 16f
+        }
+        if (label.isNotEmpty()) centeredText(c, label, r, size, color)
+        if (k.act == Act.SHIFT) drawLed(c, r, dn, shifted || caps, caps)
+        c.restore()
+    }
+
+    /** Small status LED in the corner of the shift key: off, lit (shift) or lit with a ring (caps lock). */
+    private fun drawLed(c: Canvas, r: RectF, dn: Float, on: Boolean, caps: Boolean) {
+        val cx = r.right - 9 * dn
+        val cy = r.top + 9 * dn
+        ledPaint.shader = null
+        ledPaint.style = Paint.Style.FILL
+        ledPaint.color = 0xFF050607.toInt()
+        c.drawCircle(cx, cy, 4.2f * dn, ledPaint)
+        if (on) {
+            ledPaint.shader = android.graphics.RadialGradient(
+                cx, cy, (if (caps) 9f else 7f) * dn, intArrayOf(0xFFE8F6FF.toInt(), 0xFF3C9AF0.toInt(), 0x003C9AF0), floatArrayOf(0f, 0.45f, 1f), android.graphics.Shader.TileMode.CLAMP
+            )
+            c.drawCircle(cx, cy, (if (caps) 9f else 7f) * dn, ledPaint)
+            ledPaint.shader = null
+        } else {
+            ledPaint.color = 0xFF1B2A38.toInt()
+            c.drawCircle(cx, cy, 2.6f * dn, ledPaint)
+        }
+        ledPaint.style = Paint.Style.STROKE
+        ledPaint.strokeWidth = dn
+        ledPaint.color = if (caps) 0xFFBFE0FF.toInt() else 0x66FFFFFF
+        c.drawCircle(cx, cy, 4.2f * dn, ledPaint)
+        ledPaint.style = Paint.Style.FILL
     }
 
     // ───────────── touch ─────────────
@@ -296,7 +356,10 @@ class BbKeyboardView(ctx: Context) : View(ctx) {
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> hit(e.x, e.y)?.let { fr = it.first; fc = it.second; invalidate() }
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> hit(e.x, e.y)?.let {
+                if (fr != it.first || fc != it.second) { fr = it.first; fc = it.second; lift() }
+                invalidate()
+            }
             MotionEvent.ACTION_UP -> {
                 val h = hit(e.x, e.y)
                 if (h != null) { fr = h.first; fc = h.second; pressFocused() }

@@ -206,43 +206,45 @@ class QuickTile(ctx: Context, val id: String, title: String, iconName: String?, 
     }
 }
 
-/** A game on the Games page: cover art (or the app / system icon) with its title along the bottom. */
-class CoverTile(ctx: Context, val game: Game, fav: Boolean) : FrameLayout(ctx) {
+/** A game on the Games page: a case with cover art and a glossy sheen, the title in cream underneath. */
+class CoverTile(ctx: Context, val game: Game, fav: Boolean) : LinearLayout(ctx) {
     private val img = ImageView(ctx)
     private val heart = TextView(ctx)
 
     init {
+        orientation = VERTICAL
         isFocusable = true
         isClickable = true
         background = focusGlow(ctx, 8, 2)
-        val box = FrameLayout(ctx).apply { background = ChromeDrawable(ctx, 6f, dark = true) }
-        addView(box, LayoutParams(-1, -1).apply { setMargins(ctx.dp(5), ctx.dp(5), ctx.dp(5), ctx.dp(7)) })
+        setPadding(ctx.dp(5), ctx.dp(4), ctx.dp(5), ctx.dp(2))
+        val box = FrameLayout(ctx).apply { background = CaseDrawable(ctx) }
+        addView(box, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
+        val m = LayoutParams.MATCH_PARENT
+        val artLp = { FrameLayout.LayoutParams(m, m).apply { setMargins(ctx.dp(11), ctx.dp(5), ctx.dp(5), ctx.dp(11)) } }
         img.scaleType = ImageView.ScaleType.CENTER_CROP
-        box.addView(img, LayoutParams(-1, -1).apply { setMargins(ctx.dp(2), ctx.dp(2), ctx.dp(2), ctx.dp(3)) })
+        img.background = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xFF2B3340.toInt(), 0xFF10141A.toInt())
+        )
+        box.addView(img, artLp())
         when {
             game.art != null -> Covers.load(game.art, 320) { b -> if (b != null) img.setImageBitmap(b) }
-            game.app != null -> {
-                img.scaleType = ImageView.ScaleType.FIT_CENTER
-                img.setPadding(ctx.dp(18), ctx.dp(10), ctx.dp(18), ctx.dp(30))
-                img.setImageDrawable(game.app.icon)
-            }
-            else -> {
-                img.scaleType = ImageView.ScaleType.FIT_CENTER
-                img.setPadding(ctx.dp(22), ctx.dp(14), ctx.dp(22), ctx.dp(34))
-                BbIcons.ui(ctx, "elem_input-gaming")?.let { img.setImageDrawable(it) }
-            }
+            game.app != null -> { img.scaleType = ImageView.ScaleType.FIT_CENTER; img.setPadding(ctx.dp(10), ctx.dp(10), ctx.dp(10), ctx.dp(10)); img.setImageDrawable(game.app.icon) }
+            else -> { img.scaleType = ImageView.ScaleType.FIT_CENTER; img.setPadding(ctx.dp(14), ctx.dp(14), ctx.dp(14), ctx.dp(14)); BbIcons.ui(ctx, "elem_input-gaming")?.let { img.setImageDrawable(it) } }
         }
-        box.addView(TextView(ctx).apply {
-            text = game.title; textSize = 11f; setTextColor(Theme.TEXT); gravity = Gravity.CENTER
-            maxLines = 2; ellipsize = TextUtils.TruncateAt.END
-            setShadowLayer(3f, 0f, 1f, 0xFF000000.toInt())
-            setPadding(ctx.dp(4), ctx.dp(14), ctx.dp(4), ctx.dp(4))
+        // diagonal sheen across the cover
+        box.addView(View(ctx).apply {
             background = android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0xCC000000.toInt())
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR, intArrayOf(0x5CFFFFFF, 0x10FFFFFF, 0x00FFFFFF, 0x26000000)
             )
-        }, LayoutParams(-1, -2, Gravity.BOTTOM))
+        }, artLp())
         heart.apply { text = "♥"; textSize = 14f; setTextColor(0xFFFF4D5A.toInt()); setShadowLayer(3f, 0f, 1f, 0xFF000000.toInt()); visibility = if (fav) VISIBLE else GONE }
-        box.addView(heart, LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, ctx.dp(3), ctx.dp(6), 0) })
+        box.addView(heart, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, ctx.dp(7), ctx.dp(9), 0) })
+        addView(TextView(ctx).apply {
+            text = game.title; textSize = 11f; setTextColor(0xFFF3E6C4.toInt()); gravity = Gravity.CENTER
+            maxLines = 2; ellipsize = TextUtils.TruncateAt.END
+            setShadowLayer(1f, 0f, 2f, 0xFF0A1A0E.toInt())
+            setPadding(ctx.dp(2), 0, ctx.dp(2), 0)
+        }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
     }
 
     fun setFav(on: Boolean) { heart.visibility = if (on) VISIBLE else GONE }

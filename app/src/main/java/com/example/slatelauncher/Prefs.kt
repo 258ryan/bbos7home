@@ -17,6 +17,7 @@ object Prefs {
     const val BAR_LABELS = "bar_labels"
     const val SWAP_AB = "swap_ab"
     const val HINTS = "show_hints"
+    const val ANIM = "anim_level"                // 2 full, 1 light, 0 off
     const val HIDDEN = "hidden"                  // component keys
     const val FOLDERS_HIDDEN = "folders_hidden"  // Category names
     const val ICON_OVERRIDES = "icon_overrides"  // JSON: component key -> source

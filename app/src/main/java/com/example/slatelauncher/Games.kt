@@ -156,7 +156,7 @@ object Games {
     }
 
     /** Returns an error message, or null when the game was started. */
-    fun launch(ctx: Context, g: Game): String? {
+    fun launch(ctx: Context, g: Game, options: android.os.Bundle? = null): String? {
         val now = System.currentTimeMillis()
         val intent: Intent
         if (g.app != null) {
@@ -182,7 +182,7 @@ object Games {
             }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         return try {
-            ctx.startActivity(intent)
+            ctx.startActivity(intent, options)
             Prefs.set(ctx, "gn_" + g.id, played(ctx, g) + 1)
             Prefs.sp(ctx).edit().putLong("gt_" + g.id, now).apply()
             null

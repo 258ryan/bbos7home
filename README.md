@@ -53,6 +53,15 @@ Touch works too. Auto-capitalisation, number/phone layouts and password fields a
 * UI glyphs (Quick Settings, menus, settings) use Tango (public domain) and elementary (GPL-3.0-or-later) icons;
   apps keep the BB OS 7 icons, so the two roles look different.
 
+## Depth and animation
+* **Game Center** (the Games folder): green felt table, wood rail header, stitched leather side panel and info label,
+  game cases with spine, sheen and drop shadow, titles in cream.
+* **Animations** (Settings → Appearance → Animations): Full (default) = selection pops with overshoot, press squash, folder and
+  panel slides, staggered lists, zoom-from-icon launches. Light = short fades. Off = none. Android's "animator duration scale"
+  is honoured (0 turns everything off). Only transforms and alpha are animated, which is cheap on small GPUs.
+* **Keyboard**: keys sink when pressed and the highlighted key lifts and grows with a small overshoot; the shift key has an
+  LED (on for shift, brighter with a ring for caps lock); bevelled housing with inner shadows.
+
 ## Build
 The **Build APK** GitHub Action produces `app-debug.apk` on every push (Actions tab → latest run → Artifacts).
 Locally: `./gradlew assembleDebug` (needs the Android SDK, JDK 17).
