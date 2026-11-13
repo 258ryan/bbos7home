@@ -8,6 +8,8 @@ An Android home-screen replacement styled after BlackBerry OS 7 and built to be 
   top row collapses it again. Your system wallpaper shows through (dimmed when expanded).
 * Folders: All, Favourites, Frequent, Media, Games, Downloads (**L1 / R1** or tap the names).
   The first bar of "All" is your pinned Favourites (X on an app to add / reorder).
+* **Alarm indicator** in the banner (next alarm; opens the clock app).
+* **Widgets** folder: hosts real Android widgets (X on the folder to add / remove; widgets themselves are touch-only).
 * Icons come from the BB OS 7 theme in `app/src/main/assets/bb`; other apps keep their own icon.
 
 | Button | Action |

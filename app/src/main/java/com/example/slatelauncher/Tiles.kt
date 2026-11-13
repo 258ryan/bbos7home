@@ -14,7 +14,7 @@ import android.widget.TextView
 
 enum class Category(val title: String) {
     ALL("All"), FAVORITES("Favourites"), FREQUENT("Frequent"),
-    MEDIA("Media"), GAMES("Games"), DOWNLOADS("Downloads")
+    MEDIA("Media"), GAMES("Games"), DOWNLOADS("Downloads"), WIDGETS("Widgets")
 }
 
 class AppEntry(
@@ -121,5 +121,16 @@ class CounterChip(ctx: Context, icon: Drawable?, val kind: String) : LinearLayou
     fun setCount(text: String) {
         count.text = text
         count.visibility = if (text.isEmpty()) GONE else VISIBLE
+    }
+}
+
+/** Focusable frame around a hosted widget so the D-pad can select it (X = remove). */
+class WidgetFrame(ctx: Context, val widgetId: Int) : FrameLayout(ctx) {
+    init {
+        isFocusable = true
+        isClickable = true
+        descendantFocusability = FOCUS_BLOCK_DESCENDANTS
+        background = focusGlow(ctx, 8, 0)
+        setPadding(ctx.dp(3), ctx.dp(3), ctx.dp(3), ctx.dp(3))
     }
 }

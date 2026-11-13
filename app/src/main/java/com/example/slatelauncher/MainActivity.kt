@@ -1,6 +1,12 @@
 package com.example.slatelauncher
 
 import android.app.Activity
+import android.app.AlarmManager
+import android.appwidget.AppWidgetHost
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
+import android.provider.AlarmClock
+import java.util.Date
 import android.app.Dialog
 import android.app.Notification
 import android.content.BroadcastReceiver
@@ -55,6 +61,11 @@ import android.widget.Toast
  */
 class MainActivity : Activity() {
 
+    private companion object {
+        const val REQ_BIND = 101
+        const val REQ_CONFIG = 102
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var pm: PackageManager
     private lateinit var imm: InputMethodManager
@@ -73,6 +84,10 @@ class MainActivity : Activity() {
     private lateinit var batteryText: TextView
     private lateinit var hintBar: LinearLayout
     private lateinit var phoneChip: CounterChip
+    private lateinit var alarmChip: CounterChip
+    private lateinit var widgetHost: AppWidgetHost
+    private lateinit var appWidgetManager: AppWidgetManager
+    private var pendingWidgetId = -1
     private lateinit var msgChip: CounterChip
     private lateinit var mailChip: CounterChip
     private lateinit var pagerPrev: TextView
@@ -88,6 +103,10 @@ class MainActivity : Activity() {
     private var cellDp = 60
     private var barCellDp = 90
 
+    private val alarmReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) = refreshAlarm()
+    }
+
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) = updateBattery(i)
     }
@@ -98,6 +117,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         pm = packageManager
         imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        appWidgetManager = AppWidgetManager.getInstance(this)
+        widgetHost = AppWidgetHost(this, 1024)
         window.setSoftInputMode(
             WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN or WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
         )
@@ -115,6 +136,9 @@ class MainActivity : Activity() {
         updateBattery(registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED)))
         HubService.onChange = { handler.post { refreshCounters() } }
         refreshCounters()
+        registerReceiver(alarmReceiver, IntentFilter(AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED))
+        refreshAlarm()
+        try { widgetHost.startListening() } catch (_: Exception) {}
     }
 
     override fun onResume() {
@@ -130,6 +154,8 @@ class MainActivity : Activity() {
     override fun onStop() {
         super.onStop()
         try { unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(alarmReceiver) } catch (_: Exception) {}
+        try { widgetHost.stopListening() } catch (_: Exception) {}
         HubService.onChange = null
     }
 
@@ -201,6 +227,10 @@ class MainActivity : Activity() {
         val searchChip = CounterChip(this, BbIcons.drawable(this, "search"), "search").apply {
             setOnClickListener { if (searching) closeSearch() else openSearch("") }
         }
+        alarmChip = CounterChip(this, BbIcons.drawable(this, "clock"), "alarm").apply {
+            visibility = View.GONE
+            setOnClickListener { startFirst(Intent(AlarmClock.ACTION_SHOW_ALARMS)) }
+        }
         val soundChip = CounterChip(this, BbIcons.drawable(this, "sound"), "sound").apply {
             setOnClickListener { startFirst(Intent(Settings.ACTION_SOUND_SETTINGS)) }
         }
@@ -209,6 +239,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(2), dp(8), dp(2))
             addView(soundChip, LinearLayout.LayoutParams(-2, -2))
+            addView(alarmChip, LinearLayout.LayoutParams(-2, -2))
             addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
             addView(phoneChip, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4), 0, dp(4), 0) })
             addView(msgChip, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4), 0, dp(4), 0) })
@@ -340,7 +371,7 @@ class MainActivity : Activity() {
 
     /** Show/hide pieces for collapsed (app bar over wallpaper) vs expanded (dimmed full grid). */
     private fun applyMode() {
-        val full = expanded || searching
+        val full = isFull()
         midSpacer.visibility = if (full) View.GONE else View.VISIBLE
         barScroll.visibility = if (full) View.GONE else View.VISIBLE
         caption.visibility = if (full) View.VISIBLE else View.GONE
@@ -370,6 +401,7 @@ class MainActivity : Activity() {
         hintBar.removeAllViews()
         val items = when {
             searching -> listOf("A" to "Go", "B" to "Cancel")
+            category == Category.WIDGETS -> listOf("A" to "Add", "X" to "Options", "B" to "Back", "L1/R1" to "Folders")
             expanded -> listOf("A" to "Open", "X" to "Options", "B" to "Collapse", "L1/R1" to "Folders")
             else -> listOf("A" to "Open", "X" to "Options", "↓" to "All apps", "L1/R1" to "Folders")
         }
@@ -485,6 +517,7 @@ class MainActivity : Activity() {
             Category.MEDIA -> listOf(null to apps.filter { isMedia(it) })
             Category.GAMES -> listOf(null to apps.filter { isGame(it) })
             Category.DOWNLOADS -> listOf(null to apps.filter { it.isUser })
+            Category.WIDGETS -> emptyList()
         }
         return out.filter { it.second.isNotEmpty() }
     }
@@ -516,21 +549,25 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun isFull() = expanded || searching || category == Category.WIDGETS
+
     private fun allTiles(): List<IconTile> =
-        if (expanded || searching) (0 until gridHost.childCount).map { gridHost.getChildAt(it) }
+        if (isFull()) (0 until gridHost.childCount).map { gridHost.getChildAt(it) }
             .filterIsInstance<TileGrid>().flatMap { g -> (0 until g.childCount).map { g.getChildAt(it) as IconTile } }
         else (0 until barRow.childCount).map { barRow.getChildAt(it) as IconTile }
 
     private fun rebuildGrid() {
         if (!::root.isInitialized) return
         val focus = currentFocus
-        val wasGrid = focus == null || focus is IconTile
+        val wasGrid = focus == null || focus is IconTile || focus is WidgetFrame || focus?.tag == "addwidget"
         val focusedKey = (focus as? IconTile)?.entry?.key
         barRow.removeAllViews()
         gridHost.removeAllViews()
         val secs = sections()
         val flat = secs.flatMap { it.second }
-        if (expanded || searching) {
+        if (category == Category.WIDGETS && !searching) {
+            buildWidgetPanel()
+        } else if (expanded || searching) {
             secs.forEach { (title, list) ->
                 if (title != null) gridHost.addView(sectionHeader(title))
                 val g = TileGrid(this).apply { columns = cols }
@@ -541,7 +578,8 @@ class MainActivity : Activity() {
             val w = dp(barCellDp)
             flat.forEach { barRow.addView(makeTile(it, bar = true), LinearLayout.LayoutParams(w, (w * 1.2f).toInt())) }
         }
-        emptyText.visibility = if (flat.isEmpty()) View.VISIBLE else View.GONE
+        val widgets = category == Category.WIDGETS && !searching
+        emptyText.visibility = if (flat.isEmpty() && !widgets) View.VISIBLE else View.GONE
         emptyText.text = when {
             searching -> "No matches"
             category == Category.FAVORITES -> "No favourites yet — press X on an app to add one"
@@ -549,7 +587,9 @@ class MainActivity : Activity() {
             else -> "Nothing in this folder"
         }
         if (flat.isEmpty()) { caption.text = ""; captionFloat.text = "" }
-        if (wasGrid) {
+        if (wasGrid && widgets) {
+            gridHost.getChildAt(0)?.requestFocus()
+        } else if (wasGrid) {
             val tiles = allTiles()
             (tiles.firstOrNull { it.entry.key == focusedKey } ?: tiles.firstOrNull())?.requestFocus()
         }
@@ -558,13 +598,17 @@ class MainActivity : Activity() {
     private fun setCategory(c: Category) {
         category = c
         updatePager()
+        applyMode()
         homeScroll.scrollTo(0, 0)
         barScroll.scrollTo(0, 0)
         rebuildGrid()
         focusFirst()
     }
 
-    private fun focusFirst() { allTiles().firstOrNull()?.requestFocus() }
+    private fun focusFirst() {
+        if (category == Category.WIDGETS && !searching) gridHost.getChildAt(0)?.requestFocus()
+        else allTiles().firstOrNull()?.requestFocus()
+    }
 
     private fun setExpanded(v: Boolean) {
         if (expanded == v) return
@@ -574,6 +618,115 @@ class MainActivity : Activity() {
         homeScroll.scrollTo(0, 0)
         barScroll.scrollTo(0, 0)
     }
+
+    // ───────────────────────── alarm indicator ─────────────────────────
+
+    private fun refreshAlarm() {
+        if (!::alarmChip.isInitialized) return
+        val next = (getSystemService(ALARM_SERVICE) as AlarmManager).nextAlarmClock
+        if (next == null) { alarmChip.visibility = View.GONE; return }
+        val t = next.triggerTime
+        val soon = t - System.currentTimeMillis() < 24L * 60 * 60 * 1000
+        val fmt = DateFormat.getTimeFormat(this).format(Date(t))
+        alarmChip.setCount(if (soon) fmt else DateFormat.format("EEE", t).toString() + " " + fmt)
+        alarmChip.visibility = View.VISIBLE
+    }
+
+    // ───────────────────────── widgets ─────────────────────────
+
+    private fun widgetIds(): MutableList<Int> =
+        (prefs.getString("widgets", "") ?: "").split("|").mapNotNull { it.toIntOrNull() }.toMutableList()
+
+    private fun saveWidgetIds(l: List<Int>) = prefs.edit().putString("widgets", l.joinToString("|")).apply()
+
+    private fun appLabel(pkg: String): String =
+        try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
+
+    private fun showWidgetPicker() {
+        val providers = appWidgetManager.installedProviders
+            .filter { (it.widgetCategory and AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN) != 0 }
+            .sortedBy { it.loadLabel(pm).lowercase() }
+        if (providers.isEmpty()) {
+            Toast.makeText(this, "No widgets available", Toast.LENGTH_SHORT).show()
+            return
+        }
+        showMenu("Add widget", providers.map { p ->
+            val action: () -> Unit = { beginAddWidget(p) }
+            "${p.loadLabel(pm)}  ·  ${appLabel(p.provider.packageName)}" to action
+        })
+    }
+
+    private fun beginAddWidget(p: AppWidgetProviderInfo) {
+        val id = widgetHost.allocateAppWidgetId()
+        pendingWidgetId = id
+        if (appWidgetManager.bindAppWidgetIdIfAllowed(id, p.provider)) afterBind(id)
+        else startActivityForResult(
+            Intent(AppWidgetManager.ACTION_APPWIDGET_BIND)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, p.provider),
+            REQ_BIND
+        )
+    }
+
+    private fun afterBind(id: Int) {
+        val info = appWidgetManager.getAppWidgetInfo(id)
+        if (info?.configure != null) widgetHost.startAppWidgetConfigureActivityForResult(this, id, 0, REQ_CONFIG, null)
+        else addWidgetId(id)
+    }
+
+    private fun addWidgetId(id: Int) {
+        val l = widgetIds(); l.add(id); saveWidgetIds(l)
+        pendingWidgetId = -1
+        setCategory(Category.WIDGETS)
+    }
+
+    private fun removeWidget(id: Int) {
+        widgetHost.deleteAppWidgetId(id)
+        saveWidgetIds(widgetIds().filter { it != id })
+        rebuildGrid()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_BIND && requestCode != REQ_CONFIG) return
+        val id = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)?.takeIf { it >= 0 } ?: pendingWidgetId
+        if (id < 0) return
+        if (resultCode != RESULT_OK) { widgetHost.deleteAppWidgetId(id); pendingWidgetId = -1; return }
+        if (requestCode == REQ_BIND) afterBind(id) else addWidgetId(id)
+    }
+
+    private fun buildWidgetPanel() {
+        val wDp = resources.configuration.screenWidthDp - 16
+        val maxH = (resources.displayMetrics.heightPixels * 0.5f).toInt()
+        val stale = ArrayList<Int>()
+        widgetIds().forEach { id ->
+            val info = appWidgetManager.getAppWidgetInfo(id)
+            if (info == null) { stale.add(id); return@forEach }
+            val hv = widgetHost.createView(this, id, info)
+            val hPx = info.minHeight.coerceIn(dp(96), maxH)
+            val hDp = (hPx / resources.displayMetrics.density).toInt()
+            hv.updateAppWidgetSize(null, wDp, hDp, wDp, hDp)
+            val frame = WidgetFrame(this, id)
+            frame.addView(hv, FrameLayout.LayoutParams(-1, hPx))
+            frame.setOnLongClickListener { showWidgetMenu(id); true }
+            gridHost.addView(frame, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(8), dp(4), dp(8), dp(4)) })
+        }
+        if (stale.isNotEmpty()) saveWidgetIds(widgetIds().filter { it !in stale })
+        val add = TextView(this).apply {
+            text = "+  Add widget"; textSize = 18f; setTextColor(Theme.TEXT); tag = "addwidget"
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            isFocusable = true; isClickable = true
+            background = focusGlow(context, 8, 2)
+            setOnClickListener { showWidgetPicker() }
+        }
+        gridHost.addView(add, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(8), dp(4), dp(8), dp(4)) })
+    }
+
+    private fun showWidgetMenu(id: Int) = showMenu("Widget", listOf<Pair<String, () -> Unit>>(
+        "Remove widget" to { removeWidget(id) },
+        "Add widget" to { showWidgetPicker() }
+    ))
 
     // ───────────────────────── counters (phone / messages / mail) ─────────────────────────
 
@@ -689,7 +842,10 @@ class MainActivity : Activity() {
                 setOnClickListener { d.dismiss(); act() }
             }
         }
-        rows.forEach { box.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) }) }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        rows.forEach { list.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) }) }
+        val sv = ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(list) }
+        box.addView(sv, LinearLayout.LayoutParams(-1, if (rows.size > 7) (resources.displayMetrics.heightPixels * 0.55f).toInt() else -2))
         d.setContentView(box)
         d.window?.apply {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
@@ -765,6 +921,8 @@ class MainActivity : Activity() {
     private fun onOptions() {
         when (val f = currentFocus) {
             is IconTile -> showOptions(f.entry)
+            is WidgetFrame -> showWidgetMenu(f.widgetId)
+            is TextView -> if (f.tag == "addwidget") showWidgetPicker()
             is CounterChip -> if (f.kind != "search") clearCounter(f.kind)
         }
     }
