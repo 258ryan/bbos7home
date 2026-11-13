@@ -1,19 +1,24 @@
 # bbos7home — BlackBerry OS 7-style launcher for gamepad devices
 
-An Android home-screen replacement styled after BlackBerry OS 7 (big clock, phone/message/mail counters,
-labelled icon grid, folder pager and dock) using the BB OS 7 theme icons in `app/src/main/assets/bb`, built to be driven entirely by a controller.
+An Android home-screen replacement styled after BlackBerry OS 7 and built to be driven by a controller.
+
+* Big clock, phone / messages / mail counters, search.
+* **App bar**: the current folder is one row of icons that scrolls with the D-pad. Press **Down** to
+  expand it into the full grid (folders such as Multimedia / Applications); **B** or **Up** from the
+  top row collapses it again. Your system wallpaper shows through (dimmed when expanded).
+* Folders: All, Favourites, Frequent, Media, Games, Downloads (**L1 / R1** or tap the names).
+  The first bar of "All" is your pinned Favourites (X on an app to add / reorder).
+* Icons come from the BB OS 7 theme in `app/src/main/assets/bb`; other apps keep their own icon.
 
 | Button | Action |
 |---|---|
-| D-pad / left stick | Move focus |
+| D-pad / left stick | Move focus (Down on the bar expands) |
 | A | Open app / counter |
-| B | Back → "All" folder → top |
-| X | Options (favourite, app info, uninstall) / clear a counter (or enable notification access) |
+| B | Collapse, then back to "All" |
+| X | Options (favourite, move, app info, uninstall) / clear a counter (or enable notification access) |
 | Y or Start | Search (a hardware keyboard also starts search when you type) |
-| L1 / R1 | Previous / next folder (All Apps, Favourites, Media, Games, Downloads, Frequent) |
+| L1 / R1 | Previous / next folder |
 | Select | System settings |
-
-Touch works too (tap, long-press for options, tap folder names).
 
 ## Build
 The **Build APK** GitHub Action produces `app-debug.apk` on every push (Actions tab → latest run → Artifacts).

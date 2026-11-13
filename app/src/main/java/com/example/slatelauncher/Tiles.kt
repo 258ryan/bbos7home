@@ -9,12 +9,13 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 
 enum class Category(val title: String) {
-    ALL("All Apps"), FAVORITES("Favourites"), MEDIA("Media"),
-    GAMES("Games"), DOWNLOADS("Downloads"), FREQUENT("Frequent")
+    ALL("All"), FAVORITES("Favourites"), FREQUENT("Frequent"),
+    MEDIA("Media"), GAMES("Games"), DOWNLOADS("Downloads")
 }
 
 class AppEntry(
@@ -34,7 +35,7 @@ class AppEntry(
 class TileGrid(ctx: Context) : ViewGroup(ctx) {
     var columns = 4
         set(v) { field = v.coerceAtLeast(1); requestLayout() }
-    var aspect = 1.2f
+    var aspect = 1f
 
     init { clipChildren = false; clipToPadding = false }
 
@@ -66,36 +67,17 @@ class TileGrid(ctx: Context) : ViewGroup(ctx) {
     }
 }
 
-/** One app: icon (+ label under it). Blue highlight when focused, like OS 7's selection. */
-class IconTile(ctx: Context, val entry: AppEntry, showLabel: Boolean = true, iconDp: Int = 52) : LinearLayout(ctx) {
+/** One app icon (no label, like OS 7). Solid blue square when focused. */
+class IconTile(ctx: Context, val entry: AppEntry, iconDp: Int) : FrameLayout(ctx) {
     init {
-        orientation = VERTICAL
-        gravity = Gravity.CENTER
         isFocusable = true
         isClickable = true
-        background = focusGlow(ctx, 12, 2)
-        setPadding(ctx.dp(2), ctx.dp(4), ctx.dp(2), ctx.dp(2))
+        background = focusGlow(ctx, 6, 2)
         contentDescription = entry.label
         addView(ImageView(ctx).apply {
             setImageDrawable(entry.icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
-        }, LayoutParams(ctx.dp(iconDp), ctx.dp(iconDp)))
-        if (showLabel) {
-            addView(TextView(ctx).apply {
-                text = entry.label
-                textSize = 12f
-                setTextColor(Theme.TEXT)
-                setShadowLayer(3f, 0f, 1f, 0xFF000000.toInt())
-                gravity = Gravity.CENTER
-                maxLines = 2
-                ellipsize = TextUtils.TruncateAt.END
-                setPadding(0, ctx.dp(3), 0, 0)
-            }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
-        }
-        setOnFocusChangeListener { v, has ->
-            val s = if (has) 1.08f else 1f
-            v.animate().scaleX(s).scaleY(s).setDuration(110).start()
-        }
+        }, LayoutParams(ctx.dp(iconDp), ctx.dp(iconDp), Gravity.CENTER))
     }
 }
 

@@ -33,6 +33,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -41,11 +42,14 @@ import android.widget.TextView
 import android.widget.Toast
 
 /**
- * BlackBerry-OS-7-style home screen, driven by a gamepad:
- *   D-pad / left stick  move      A  open        B  back / "All Apps"
+ * BlackBerry-OS-7-style home screen for gamepads.
+ *
+ * Collapsed: the current folder is a single scrolling app bar (D-pad left/right).
+ * Press Down on it to expand into the full grid; B (or Up from the top row) collapses again.
+ *
+ *   D-pad / left stick  move      A  open        B  collapse / back to "All"
  *   X  options / clear counter    Y or Start  search      Select  system settings
  *   L1 / R1  previous / next folder
- * Typing on a hardware keyboard starts search, like OS 7's universal search.
  */
 class MainActivity : Activity() {
 
@@ -54,10 +58,14 @@ class MainActivity : Activity() {
     private lateinit var imm: InputMethodManager
     private val prefs by lazy { getSharedPreferences("slate", MODE_PRIVATE) }
 
+    private lateinit var root: LinearLayout
+    private lateinit var midSpacer: View
+    private lateinit var barScroll: HorizontalScrollView
+    private lateinit var barRow: LinearLayout
     private lateinit var homeScroll: ScrollView
-    private lateinit var grid: TileGrid
-    private lateinit var dock: LinearLayout
+    private lateinit var gridHost: LinearLayout
     private lateinit var emptyText: TextView
+    private lateinit var caption: TextView
     private lateinit var searchBar: EditText
     private lateinit var batteryText: TextView
     private lateinit var hintBar: LinearLayout
@@ -72,6 +80,9 @@ class MainActivity : Activity() {
     private var appsKey = ""
     private var category = Category.ALL
     private var searching = false
+    private var expanded = false
+    private var cols = 6
+    private var cellDp = 60
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) = updateBattery(i)
@@ -87,9 +98,9 @@ class MainActivity : Activity() {
             WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN or WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
         )
         setContentView(buildUi())
-        applyColumns()
+        computeColumns()
         updatePager()
-        updateHints()
+        applyMode()
     }
 
     override fun onStart() {
@@ -119,16 +130,17 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.hasCategory(Intent.CATEGORY_HOME)) {
-            if (searching) closeSearch()
-            if (category != Category.ALL) setCategory(Category.ALL)
-            homeScroll.scrollTo(0, 0)
-            focusFirst()
+            if (searching) { searching = false; closeSearchQuiet() }
+            category = Category.ALL
+            expanded = false
+            updatePager(); applyMode(); rebuildGrid(); focusFirst()
         }
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
-        applyColumns()
+        computeColumns()
+        rebuildGrid()
     }
 
     @Suppress("OVERRIDE_DEPRECATION")
@@ -136,31 +148,34 @@ class MainActivity : Activity() {
 
     // ───────────────────────── UI construction ─────────────────────────
 
+    private fun hairline() = View(this).apply { setBackgroundColor(Color.parseColor("#44FFFFFF")) }
+    private fun addHairline(parent: LinearLayout) = parent.addView(hairline(), LinearLayout.LayoutParams(-1, 1))
+
     private fun buildUi(): View {
-        val root = LinearLayout(this).apply {
+        root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = wallpaper()
             fitsSystemWindows = true
         }
 
         // Header: date (left), big clock (centre), battery (right)
-        val header = FrameLayout(this).apply { setPadding(dp(12), dp(4), dp(12), 0) }
+        val header = FrameLayout(this).apply { setPadding(dp(12), dp(2), dp(12), dp(2)) }
         header.addView(TextClock(this).apply {
             format12Hour = "h:mm"; format24Hour = "H:mm"
-            textSize = 64f; setTextColor(Theme.TEXT)
-            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+            textSize = 44f; setTextColor(Theme.TEXT)
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
             includeFontPadding = false
             setShadowLayer(6f, 0f, 2f, Color.BLACK)
         }, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL))
         header.addView(TextClock(this).apply {
             format12Hour = "EEE, MMM d"; format24Hour = "EEE, MMM d"
-            textSize = 13f; setTextColor(Theme.TEXT)
-        }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { topMargin = dp(8) })
-        batteryText = TextView(this).apply { textSize = 13f; setTextColor(Theme.TEXT) }
-        header.addView(batteryText, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = dp(8) })
+            textSize = 14f; setTextColor(Theme.TEXT); setShadowLayer(4f, 0f, 1f, Color.BLACK)
+        }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { topMargin = dp(4) })
+        batteryText = TextView(this).apply { textSize = 14f; setTextColor(Theme.TEXT); setShadowLayer(4f, 0f, 1f, Color.BLACK) }
+        header.addView(batteryText, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = dp(4) })
         root.addView(header, LinearLayout.LayoutParams(-1, -2))
 
         // Counters: phone / messages / mail, search at the right
+        addHairline(root)
         phoneChip = CounterChip(this, BbIcons.drawable(this, "phone"), "phone")
         msgChip = CounterChip(this, BbIcons.drawable(this, "messages"), "msg")
         mailChip = CounterChip(this, BbIcons.drawable(this, "mail"), "mail")
@@ -173,7 +188,8 @@ class MainActivity : Activity() {
         val counters = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), 0, dp(8), 0)
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+            setBackgroundColor(Color.parseColor("#55000000"))
             addView(View(context), LinearLayout.LayoutParams(dp(48), 1))
             addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
             addView(phoneChip, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(4), 0, dp(4), 0) })
@@ -183,6 +199,7 @@ class MainActivity : Activity() {
             addView(searchChip, LinearLayout.LayoutParams(-2, -2))
         }
         root.addView(counters, LinearLayout.LayoutParams(-1, -2))
+        addHairline(root)
 
         // Search bar (hidden until used)
         searchBar = EditText(this).apply {
@@ -192,10 +209,10 @@ class MainActivity : Activity() {
             setSingleLine(true)
             imeOptions = EditorInfo.IME_ACTION_GO or EditorInfo.IME_FLAG_NO_EXTRACT_UI
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#CC101114")); cornerRadius = dpf(6f)
+                setColor(Color.parseColor("#CC101114")); cornerRadius = dpf(4f)
                 setStroke(dp(2), Theme.BLUE)
             }
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setPadding(dp(12), dp(6), dp(12), dp(6))
             visibility = View.GONE
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -204,53 +221,65 @@ class MainActivity : Activity() {
             })
             setOnEditorActionListener { _, _, _ -> submitSearch(); true }
         }
-        root.addView(searchBar, LinearLayout.LayoutParams(-1, -2).apply {
-            setMargins(dp(10), dp(6), dp(10), dp(2))
-        })
+        root.addView(searchBar, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(10), dp(4), dp(10), dp(2)) })
 
-        // App grid
-        grid = TileGrid(this)
+        // Wallpaper window shown while collapsed
+        midSpacer = View(this)
+        root.addView(midSpacer, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // Folder strip: previous (dim) | current | next (dim)
+        addHairline(root)
+        pagerPrev = pagerLabel(18f, Theme.TEXT_DIM, Gravity.START or Gravity.CENTER_VERTICAL) { shiftCategory(-1) }
+        pagerCur = pagerLabel(22f, Theme.TEXT, Gravity.CENTER) { }
+        pagerNext = pagerLabel(18f, Theme.TEXT_DIM, Gravity.END or Gravity.CENTER_VERTICAL) { shiftCategory(1) }
+        val strip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(12), dp(4), dp(12), dp(4))
+            setBackgroundColor(Color.parseColor("#66000000"))
+            addView(pagerPrev, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(pagerCur, LinearLayout.LayoutParams(0, -2, 1.3f))
+            addView(pagerNext, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        root.addView(strip, LinearLayout.LayoutParams(-1, -2))
+        addHairline(root)
+
+        // Name of the focused icon
+        caption = TextView(this).apply {
+            textSize = 13f; setTextColor(Theme.TEXT_DIM); gravity = Gravity.CENTER
+            maxLines = 1; setShadowLayer(3f, 0f, 1f, Color.BLACK)
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+        }
+        root.addView(caption, LinearLayout.LayoutParams(-1, -2))
+
         emptyText = TextView(this).apply {
             setTextColor(Theme.TEXT_DIM); textSize = 15f; gravity = Gravity.CENTER
-            setPadding(0, dp(40), 0, 0); visibility = View.GONE
+            setPadding(dp(16), dp(24), dp(16), dp(24)); visibility = View.GONE
         }
-        val inner = LinearLayout(this).apply {
+        root.addView(emptyText, LinearLayout.LayoutParams(-1, -2))
+
+        // Collapsed: one horizontally scrolling app bar
+        barRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false }
+        barScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            setBackgroundColor(Color.parseColor("#B0000000"))
+            addView(barRow, ViewGroup.LayoutParams(-2, -2))
+        }
+        root.addView(barScroll, LinearLayout.LayoutParams(-1, -2))
+
+        // Expanded: full grid with folder sections
+        gridHost = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false; clipToPadding = false
-            setPadding(dp(4), dp(8), dp(4), dp(8))
-            addView(grid, LinearLayout.LayoutParams(-1, -2))
-            addView(emptyText, LinearLayout.LayoutParams(-1, -2))
+            setPadding(0, dp(4), 0, dp(8))
         }
         homeScroll = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             clipChildren = false; clipToPadding = false
-            addView(inner, ViewGroup.LayoutParams(-1, -2))
+            addView(gridHost, ViewGroup.LayoutParams(-1, -2))
         }
         root.addView(homeScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-
-        // Folder pager: previous (dim) | current | next (dim)
-        pagerPrev = pagerLabel(18f, Theme.TEXT_DIM, Gravity.START or Gravity.CENTER_VERTICAL) { shiftCategory(-1) }
-        pagerCur = pagerLabel(22f, Theme.TEXT, Gravity.CENTER) { }
-        pagerNext = pagerLabel(18f, Theme.TEXT_DIM, Gravity.END or Gravity.CENTER_VERTICAL) { shiftCategory(1) }
-        val pager = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(12), dp(6), dp(12), dp(2))
-            addView(pagerPrev, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(pagerCur, LinearLayout.LayoutParams(0, -2, 1.3f))
-            addView(pagerNext, LinearLayout.LayoutParams(0, -2, 1f))
-        }
-        root.addView(pager, LinearLayout.LayoutParams(-1, -2))
-
-        // Dock (first favourites)
-        dock = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setBackgroundColor(Theme.BAR)
-            setPadding(dp(4), dp(2), dp(4), dp(2))
-            visibility = View.GONE
-        }
-        root.addView(dock, LinearLayout.LayoutParams(-1, -2))
 
         // Button hints
         hintBar = LinearLayout(this).apply {
@@ -270,9 +299,20 @@ class MainActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
-    private fun applyColumns() {
+    private fun computeColumns() {
         val wDp = resources.configuration.screenWidthDp
-        grid.columns = (wDp / 60).coerceIn(4, 8)
+        cols = (wDp / 70).coerceIn(5, 9)
+        cellDp = wDp / cols
+    }
+
+    /** Show/hide pieces for collapsed (app bar over wallpaper) vs expanded (dimmed full grid). */
+    private fun applyMode() {
+        val full = expanded || searching
+        midSpacer.visibility = if (full) View.GONE else View.VISIBLE
+        barScroll.visibility = if (full) View.GONE else View.VISIBLE
+        homeScroll.visibility = if (full) View.VISIBLE else View.GONE
+        root.setBackgroundColor(if (full) Color.parseColor("#D8000000") else Color.TRANSPARENT)
+        updateHints()
     }
 
     private fun hint(btn: String, label: String): View {
@@ -294,8 +334,11 @@ class MainActivity : Activity() {
 
     private fun updateHints() {
         hintBar.removeAllViews()
-        val items = if (searching) listOf("A" to "Go", "B" to "Cancel")
-        else listOf("A" to "Open", "X" to "Options", "Y" to "Search", "L1/R1" to "Folders")
+        val items = when {
+            searching -> listOf("A" to "Go", "B" to "Cancel")
+            expanded -> listOf("A" to "Open", "X" to "Options", "B" to "Collapse", "L1/R1" to "Folders")
+            else -> listOf("A" to "Open", "X" to "Options", "↓" to "All apps", "L1/R1" to "Folders")
+        }
         items.forEach { (b, l) ->
             hintBar.addView(hint(b, l), LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(8), 0, dp(8), 0) })
         }
@@ -349,84 +392,147 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    /** First run: put phone, messages, browser, camera and settings in the dock, like a fresh BB home screen. */
-    private fun seedFavorites() {
-        if (prefs.contains("favs")) return
-        val seed = listOf("phone", "messages", "browser", "camera", "settings")
-            .mapNotNull { n -> apps.firstOrNull { it.themed == n }?.key }
-        prefs.edit().putStringSet("favs", seed.toSet()).apply()
-    }
+    // Favourites are an ordered list; they form the first bar in "All", like OS 7's pinned row.
+    private fun favorites(): MutableList<String> =
+        (prefs.getString("favlist", "") ?: "").split("|").filter { it.isNotEmpty() }.toMutableList()
 
-    private fun favorites(): MutableSet<String> =
-        HashSet(prefs.getStringSet("favs", emptySet()) ?: emptySet())
+    private fun saveFavorites(l: List<String>) = prefs.edit().putString("favlist", l.joinToString("|")).apply()
+
+    private fun seedFavorites() {
+        if (prefs.contains("favlist")) return
+        val seed = listOf("mail", "messages", "contacts", "browser", "video", "calendar", "phone", "camera", "music", "settings")
+            .mapNotNull { n -> apps.firstOrNull { it.themed == n }?.key }
+        saveFavorites(seed)
+    }
 
     private fun launchCount(e: AppEntry) = prefs.getInt("cnt_" + e.key, 0)
 
-    private fun filtered(): List<AppEntry> {
+    private fun isMedia(e: AppEntry) =
+        e.category == ApplicationInfo.CATEGORY_AUDIO || e.category == ApplicationInfo.CATEGORY_VIDEO ||
+            e.category == ApplicationInfo.CATEGORY_IMAGE ||
+            e.themed == "music" || e.themed == "video" || e.themed == "gallery" || e.themed == "recorder"
+
+    private fun isGame(e: AppEntry) = e.category == ApplicationInfo.CATEGORY_GAME
+
+    private fun pinned(): List<AppEntry> {
+        val by = apps.associateBy { it.key }
+        return favorites().mapNotNull { by[it] }
+    }
+
+    /** Sections of the current folder. A null title means no folder header. */
+    private fun sections(): List<Pair<String?, List<AppEntry>>> {
         val q = searchBar.text.toString().trim()
-        if (searching && q.isNotEmpty()) return apps.filter { it.label.contains(q, ignoreCase = true) }
-        return when (category) {
-            Category.ALL -> apps
-            Category.FAVORITES -> { val f = favorites(); apps.filter { it.key in f } }
-            Category.MEDIA -> apps.filter {
-                it.category == ApplicationInfo.CATEGORY_AUDIO || it.category == ApplicationInfo.CATEGORY_VIDEO ||
-                    it.category == ApplicationInfo.CATEGORY_IMAGE ||
-                    it.themed == "music" || it.themed == "video" || it.themed == "gallery"
+        if (searching) {
+            val r = if (q.isEmpty()) apps else apps.filter { it.label.contains(q, ignoreCase = true) }
+            return listOf<Pair<String?, List<AppEntry>>>(null to r).filter { it.second.isNotEmpty() }
+        }
+        val out: List<Pair<String?, List<AppEntry>>> = when (category) {
+            Category.ALL -> {
+                val pin = pinned()
+                val pinKeys = pin.map { it.key }.toSet()
+                val rest = apps.filter { it.key !in pinKeys }
+                val media = rest.filter { isMedia(it) }
+                val r2 = rest.filter { !isMedia(it) }
+                val games = r2.filter { isGame(it) }
+                val r3 = r2.filter { !isGame(it) }
+                val dl = r3.filter { it.isUser }
+                val sys = r3.filter { !it.isUser }
+                listOf(null to pin, "Multimedia" to media, "Games" to games, "Downloads" to dl, "Applications" to sys)
             }
-            Category.GAMES -> apps.filter { it.category == ApplicationInfo.CATEGORY_GAME }
-            Category.DOWNLOADS -> apps.filter { it.isUser }
-            Category.FREQUENT -> apps.map { it to launchCount(it) }
-                .filter { it.second > 0 }.sortedByDescending { it.second }.take(12).map { it.first }
+            Category.FAVORITES -> listOf(null to pinned())
+            Category.FREQUENT -> listOf(null to apps.map { it to launchCount(it) }
+                .filter { it.second > 0 }.sortedByDescending { it.second }.take(24).map { it.first })
+            Category.MEDIA -> listOf(null to apps.filter { isMedia(it) })
+            Category.GAMES -> listOf(null to apps.filter { isGame(it) })
+            Category.DOWNLOADS -> listOf(null to apps.filter { it.isUser })
+        }
+        return out.filter { it.second.isNotEmpty() }
+    }
+
+    private fun makeTile(e: AppEntry): IconTile {
+        val t = IconTile(this, e, (cellDp * 0.8f).toInt())
+        t.setOnClickListener { launch(e) }
+        t.setOnLongClickListener { showOptions(e); true }
+        t.setOnFocusChangeListener { _, has -> if (has) caption.text = e.label }
+        return t
+    }
+
+    private fun sectionHeader(title: String): View {
+        val icon = when (title) {
+            "Multimedia" -> "folder_media"
+            "Games" -> "games"
+            "Downloads" -> "folder_dl"
+            else -> "folder_apps"
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(10), dp(8), dp(6))
+            addView(ImageView(context).apply { setImageDrawable(BbIcons.drawable(context, icon)) }, LinearLayout.LayoutParams(dp(30), dp(30)))
+            addView(TextView(context).apply {
+                text = title; textSize = 20f; setTextColor(Theme.TEXT); setPadding(dp(8), 0, 0, 0)
+            })
         }
     }
 
-    private fun wireTile(t: IconTile) {
-        val e = t.entry
-        t.setOnClickListener { launch(e) }
-        t.setOnLongClickListener { showOptions(e); true }
-    }
+    private fun allTiles(): List<IconTile> =
+        if (expanded || searching) (0 until gridHost.childCount).map { gridHost.getChildAt(it) }
+            .filterIsInstance<TileGrid>().flatMap { g -> (0 until g.childCount).map { g.getChildAt(it) as IconTile } }
+        else (0 until barRow.childCount).map { barRow.getChildAt(it) as IconTile }
 
     private fun rebuildGrid() {
+        if (!::root.isInitialized) return
         val focus = currentFocus
         val wasGrid = focus == null || focus is IconTile
         val focusedKey = (focus as? IconTile)?.entry?.key
-        grid.removeAllViews()
-        val list = filtered()
-        list.forEach { e -> grid.addView(IconTile(this, e).also { wireTile(it) }) }
-        emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+        barRow.removeAllViews()
+        gridHost.removeAllViews()
+        val secs = sections()
+        val flat = secs.flatMap { it.second }
+        if (expanded || searching) {
+            secs.forEach { (title, list) ->
+                if (title != null) gridHost.addView(sectionHeader(title))
+                val g = TileGrid(this).apply { columns = cols }
+                list.forEach { g.addView(makeTile(it)) }
+                gridHost.addView(g, LinearLayout.LayoutParams(-1, -2))
+            }
+        } else {
+            val px = dp(cellDp)
+            flat.forEach { barRow.addView(makeTile(it), LinearLayout.LayoutParams(px, px)) }
+        }
+        emptyText.visibility = if (flat.isEmpty()) View.VISIBLE else View.GONE
         emptyText.text = when {
             searching -> "No matches"
             category == Category.FAVORITES -> "No favourites yet — press X on an app to add one"
             category == Category.FREQUENT -> "Apps you use often will appear here"
             else -> "Nothing in this folder"
         }
-        rebuildDock()
+        if (flat.isEmpty()) caption.text = ""
         if (wasGrid) {
-            val target = (0 until grid.childCount).map { grid.getChildAt(it) as IconTile }
-                .firstOrNull { it.entry.key == focusedKey } ?: grid.getChildAt(0)
-            target?.requestFocus()
+            val tiles = allTiles()
+            (tiles.firstOrNull { it.entry.key == focusedKey } ?: tiles.firstOrNull())?.requestFocus()
         }
-    }
-
-    private fun rebuildDock() {
-        dock.removeAllViews()
-        val favs = favorites()
-        apps.filter { it.key in favs }.take(6).forEach { e ->
-            val t = IconTile(this, e, showLabel = false, iconDp = 44).also { wireTile(it) }
-            dock.addView(t, LinearLayout.LayoutParams(dp(64), dp(56)))
-        }
-        dock.visibility = if (dock.childCount > 0 && !searching) View.VISIBLE else View.GONE
     }
 
     private fun setCategory(c: Category) {
         category = c
         updatePager()
         homeScroll.scrollTo(0, 0)
+        barScroll.scrollTo(0, 0)
         rebuildGrid()
         focusFirst()
     }
 
-    private fun focusFirst() { grid.getChildAt(0)?.requestFocus() }
+    private fun focusFirst() { allTiles().firstOrNull()?.requestFocus() }
+
+    private fun setExpanded(v: Boolean) {
+        if (expanded == v) return
+        expanded = v
+        applyMode()
+        rebuildGrid()
+        homeScroll.scrollTo(0, 0)
+        barScroll.scrollTo(0, 0)
+    }
 
     // ───────────────────────── counters (phone / messages / mail) ─────────────────────────
 
@@ -494,18 +600,23 @@ class MainActivity : Activity() {
     private fun showOptions(e: AppEntry) {
         val favs = favorites()
         val isFav = e.key in favs
-        val actions = listOf<Pair<String, () -> Unit>>(
-            "Open" to { launch(e) },
-            (if (isFav) "Remove from Favourites" else "Add to Favourites") to {
-                if (isFav) favs.remove(e.key) else favs.add(e.key)
-                prefs.edit().putStringSet("favs", favs).apply()
-                rebuildGrid()
-            },
-            "App info" to {
-                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", e.pkg, null)))
-            },
-            "Uninstall" to { startActivity(Intent(Intent.ACTION_DELETE, Uri.fromParts("package", e.pkg, null))) }
-        )
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        actions += "Open" to { launch(e) }
+        actions += (if (isFav) "Remove from Favourites" else "Add to Favourites") to {
+            if (isFav) favs.remove(e.key) else favs.add(e.key)
+            saveFavorites(favs)
+            rebuildGrid()
+        }
+        if (isFav && favs.indexOf(e.key) > 0) actions += "Move left" to {
+            val i = favs.indexOf(e.key); favs.removeAt(i); favs.add(i - 1, e.key); saveFavorites(favs); rebuildGrid()
+        }
+        if (isFav && favs.indexOf(e.key) < favs.size - 1) actions += "Move right" to {
+            val i = favs.indexOf(e.key); favs.removeAt(i); favs.add(i + 1, e.key); saveFavorites(favs); rebuildGrid()
+        }
+        actions += "App info" to {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", e.pkg, null)))
+        }
+        actions += "Uninstall" to { startActivity(Intent(Intent.ACTION_DELETE, Uri.fromParts("package", e.pkg, null))) }
         showMenu(e.label, actions)
     }
 
@@ -529,7 +640,7 @@ class MainActivity : Activity() {
                 text = label; textSize = 18f; setTextColor(Theme.TEXT)
                 setPadding(dp(16), dp(13), dp(16), dp(13))
                 isFocusable = true; isClickable = true
-                background = focusGlow(context, 8, 1)
+                background = focusGlow(context, 6, 1)
                 setOnClickListener { d.dismiss(); act() }
             }
         }
@@ -558,24 +669,29 @@ class MainActivity : Activity() {
         searchBar.visibility = View.VISIBLE
         searchBar.setText(initial)
         searchBar.setSelection(searchBar.text.length)
-        updateHints()
+        applyMode()
         rebuildGrid()
         searchBar.requestFocus()
         searchBar.post { imm.showSoftInput(searchBar, InputMethodManager.SHOW_IMPLICIT) }
     }
 
-    private fun closeSearch() {
-        searching = false
+    private fun closeSearchQuiet() {
         searchBar.setText("")
         searchBar.visibility = View.GONE
         imm.hideSoftInputFromWindow(searchBar.windowToken, 0)
-        updateHints()
+    }
+
+    private fun closeSearch() {
+        searching = false
+        expanded = false
+        closeSearchQuiet()
+        applyMode()
         rebuildGrid()
         focusFirst()
     }
 
     private fun submitSearch() {
-        val list = filtered()
+        val list = sections().flatMap { it.second }
         if (list.size == 1) { launch(list[0]); closeSearch() } else focusFirst()
     }
 
@@ -584,8 +700,9 @@ class MainActivity : Activity() {
     private fun handleBack() {
         when {
             searching -> closeSearch()
+            expanded -> { setExpanded(false); focusFirst() }
             category != Category.ALL -> setCategory(Category.ALL)
-            else -> { homeScroll.smoothScrollTo(0, 0); focusFirst() }
+            else -> { barScroll.smoothScrollTo(0, 0); focusFirst() }
         }
     }
 
@@ -607,8 +724,15 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Is [f] a tile in the very first row of the expanded grid? */
+    private fun inTopRow(f: View): Boolean {
+        val p = f.parent
+        return p is TileGrid && gridHost.getChildAt(0) === p && f.top < f.height
+    }
+
     override fun dispatchKeyEvent(e: KeyEvent): Boolean {
         val up = e.action == KeyEvent.ACTION_UP
+        val down = e.action == KeyEvent.ACTION_DOWN
         when (e.keyCode) {
             KeyEvent.KEYCODE_BUTTON_A -> { if (up) onConfirm(); return true }
             KeyEvent.KEYCODE_BUTTON_B -> { if (up) handleBack(); return true }
@@ -623,9 +747,21 @@ class MainActivity : Activity() {
             }
             KeyEvent.KEYCODE_BUTTON_L1 -> { if (up) shiftCategory(-1); return true }
             KeyEvent.KEYCODE_BUTTON_R1 -> { if (up) shiftCategory(1); return true }
+            // Down on the app bar expands to the grid; Up from the grid's top row collapses it.
+            KeyEvent.KEYCODE_DPAD_DOWN -> if (!expanded && !searching && currentFocus is IconTile) {
+                if (down && e.repeatCount == 0) setExpanded(true)
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                val f = currentFocus
+                if (expanded && !searching && f is IconTile && inTopRow(f)) {
+                    if (down && e.repeatCount == 0) { setExpanded(false); focusFirst() }
+                    return true
+                }
+            }
         }
         // Hardware keyboard: start typing anywhere to search.
-        if (e.action == KeyEvent.ACTION_DOWN && !searching && e.repeatCount == 0 && e.isPrintingKey &&
+        if (down && !searching && e.repeatCount == 0 && e.isPrintingKey &&
             !e.isCtrlPressed && !e.isAltPressed && e.keyCode != KeyEvent.KEYCODE_SPACE
         ) {
             val ch = e.unicodeChar

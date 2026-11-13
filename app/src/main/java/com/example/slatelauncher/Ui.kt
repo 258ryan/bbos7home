@@ -43,12 +43,12 @@ fun iconPlate(ctx: Context): Drawable {
     return LayerDrawable(arrayOf(base, gloss))
 }
 
-/** Blue "selected item" glow used when a tile / chip / row has focus. */
-fun focusGlow(ctx: Context, radiusDp: Int = 14, insetDp: Int = 2): Drawable {
+/** Solid blue rounded "selected item" square, like OS 7. */
+fun focusGlow(ctx: Context, radiusDp: Int = 6, insetDp: Int = 2): Drawable {
     val glow = GradientDrawable(
         GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(Theme.BLUE_LIGHT, Theme.BLUE, Theme.BLUE_DARK)
-    ).apply { cornerRadius = ctx.dpf(radiusDp.toFloat()); setStroke(ctx.dp(2), Color.parseColor("#D6ECFF")) }
+        intArrayOf(Color.parseColor("#3C9AF0"), Color.parseColor("#1668C6"))
+    ).apply { cornerRadius = ctx.dpf(radiusDp.toFloat()) }
     val none = GradientDrawable().apply { setColor(Color.TRANSPARENT) }
     val sl = StateListDrawable().apply {
         addState(intArrayOf(android.R.attr.state_focused), glow)
