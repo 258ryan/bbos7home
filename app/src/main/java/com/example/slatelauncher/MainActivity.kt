@@ -74,6 +74,7 @@ class MainActivity : Activity() {
     private companion object {
         const val REQ_BIND = 101
         const val REQ_CONFIG = 102
+        const val REQ_IMAGE = 103
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -106,6 +107,8 @@ class MainActivity : Activity() {
 
     private var apps: List<AppEntry> = emptyList()
     private var appsKey = ""
+    private var texturesBuilt = true
+    private var pendingIconKey = ""
     private var category = Category.ALL
     private var searching = false
     private var expanded = false
@@ -135,6 +138,8 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         else window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
             View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        Materials.enabled = Prefs.bool(this, Prefs.TEXTURES, true)
+        texturesBuilt = Materials.enabled
         setContentView(buildUi())
         computeColumns()
         updatePager()
@@ -153,6 +158,11 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (Prefs.bool(this, Prefs.TEXTURES, true) != texturesBuilt) { recreate(); return }
+        if (category != Category.ALL && category !in cats()) category = Category.ALL
+        computeColumns()
+        updatePager()
+        applyMode()
         refreshApps()
         refreshCounters()
         if (category == Category.QUICK) refreshQuick()
@@ -371,9 +381,10 @@ class MainActivity : Activity() {
 
     private fun computeColumns() {
         val wDp = resources.configuration.screenWidthDp
-        cols = (wDp / 70).coerceIn(5, 9)
+        val forced = Prefs.int(this, Prefs.COLS, 0)
+        cols = if (forced > 0) forced.coerceIn(3, 10) else (wDp / 70).coerceIn(5, 9)
         cellDp = wDp / cols
-        val barCols = (wDp / 90).coerceIn(4, 8)
+        val barCols = if (forced > 0) forced.coerceIn(3, 8) else (wDp / 90).coerceIn(4, 8)
         barCellDp = wDp / barCols
     }
 
@@ -384,7 +395,9 @@ class MainActivity : Activity() {
         barScroll.visibility = if (full) View.GONE else View.VISIBLE
         caption.visibility = if (full) View.VISIBLE else View.GONE
         homeScroll.visibility = if (full) View.VISIBLE else View.GONE
-        if (full) root.background = Materials.dimLeather(this, 236) else root.setBackgroundColor(Color.TRANSPARENT)
+        if (full) root.background = Materials.dimLeather(this, Prefs.int(this, Prefs.DIM, 92) * 255 / 100)
+        else root.setBackgroundColor(Color.TRANSPARENT)
+        hintBar.visibility = if (Prefs.bool(this, Prefs.HINTS, true)) View.VISIBLE else View.GONE
         updateHints()
     }
 
@@ -407,6 +420,7 @@ class MainActivity : Activity() {
         hintBar.removeAllViews()
         val items = when {
             searching -> listOf("A" to "Go", "B" to "Cancel")
+            category == Category.GAMES -> listOf("A" to "Play", "X" to "Options", "B" to "Back", "L1/R1" to "Folders")
             category == Category.HUB -> listOf("A" to "Open", "X" to "Options", "B" to "Back", "L1/R1" to "Folders")
             category == Category.QUICK -> listOf("A" to "Change", "X" to "Lower", "B" to "Back", "L1/R1" to "Folders")
             category == Category.WIDGETS -> listOf("A" to "Add", "X" to "Options", "B" to "Back", "L1/R1" to "Folders")
@@ -418,12 +432,20 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun updatePager() {
-        val all = Category.values()
-        pagerPrev.text = all[(category.ordinal + all.size - 1) % all.size].title
-        pagerCur.text = category.title
-        pagerNext.text = all[(category.ordinal + 1) % all.size].title
+    /** Folders shown in the strip (the user can hide any except "All"). */
+    private fun cats(): List<Category> {
+        val hidden = Prefs.strSet(this, Prefs.FOLDERS_HIDDEN)
+        return Category.values().filter { it == Category.ALL || it.name !in hidden }
     }
+
+    private fun updatePager() {
+        val all = cats()
+        val cur = all.indexOf(category).let { if (it < 0) 0 else it }
+        pagerPrev.text = all[(cur + all.size - 1) % all.size].title
+        pagerCur.text = category.title
+        pagerNext.text = all[(cur + 1) % all.size].title
+    }
+
 
     private fun updateBattery(i: Intent?) {
         if (i == null) return
@@ -444,37 +466,35 @@ class MainActivity : Activity() {
     private fun refreshApps() {
         Thread {
             val q = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            val list = pm.queryIntentActivities(q, 0)
-                .filter { it.activityInfo.name != MainActivity::class.java.name }
-                .map {
-                    val ai = it.activityInfo.applicationInfo
-                    val label = it.loadLabel(pm).toString()
-                    val themed = BbIcons.nameFor(it.activityInfo.packageName, label)
-                    AppEntry(
-                        label,
-                        ComponentName(it.activityInfo.packageName, it.activityInfo.name),
-                        (themed?.let { n -> BbIcons.drawable(this, n) }) ?: platedIcon(it.loadIcon(pm)),
-                        ai.category,
-                        (ai.flags and ApplicationInfo.FLAG_SYSTEM) == 0,
-                        themed
-                    )
-                }
-                .sortedBy { it.label.lowercase() }
-            val key = list.joinToString("|") { it.key + it.label }
+            val raw = pm.queryIntentActivities(q, 0).filter { it.activityInfo.name != MainActivity::class.java.name }
+            val rev = Prefs.int(this, Prefs.ICON_REV, 0)
+            val probe = raw.joinToString("|") { it.activityInfo.packageName + "/" + it.activityInfo.name } + "#" + rev
+            if (probe == appsKey) {
+                handler.post { if (!isDestroyed && category == Category.FREQUENT) rebuildGrid() }
+                return@Thread
+            }
+            val hidden = IconStore.hidden(this)
+            val labels = IconStore.labelOverrides(this)
+            val list = raw.mapNotNull {
+                val cn = ComponentName(it.activityInfo.packageName, it.activityInfo.name)
+                if (cn.flattenToString() in hidden) return@mapNotNull null
+                val ai = it.activityInfo.applicationInfo
+                val label = labels.optString(cn.flattenToString(), "").ifEmpty { it.loadLabel(pm).toString() }
+                val themed = BbIcons.nameFor(cn.packageName, label)
+                AppEntry(
+                    label, cn, IconStore.resolve(this, cn, it.loadIcon(pm), themed),
+                    ai.category, (ai.flags and ApplicationInfo.FLAG_SYSTEM) == 0, themed
+                )
+            }.sortedBy { it.label.lowercase() }
             handler.post {
                 if (isDestroyed) return@post
-                if (key != appsKey) {
-                    appsKey = key; apps = list
-                    seedFavorites()
-                    rebuildGrid()
-                } else if (category == Category.FREQUENT) rebuildGrid()
+                appsKey = probe; apps = list
+                seedFavorites()
+                if (romCache != null) refreshGameList()
+                rebuildGrid()
             }
         }.start()
     }
-
-    /** Apps without a bundled BB icon get their own icon on the glossy OS 7 plate. */
-    private fun platedIcon(icon: Drawable): Drawable =
-        LayerDrawable(arrayOf(iconPlate(this), InsetDrawable(icon, 0.16f)))
 
     // Favourites are an ordered list; they form the first bar in "All", like OS 7's pinned row.
     private fun favorites(): MutableList<String> =
@@ -496,7 +516,7 @@ class MainActivity : Activity() {
             e.category == ApplicationInfo.CATEGORY_IMAGE ||
             e.themed == "music" || e.themed == "video" || e.themed == "gallery" || e.themed == "recorder"
 
-    private fun isGame(e: AppEntry) = e.category == ApplicationInfo.CATEGORY_GAME
+    private fun isGame(e: AppEntry) = Games.isAndroidGame(this, e)
 
     private fun pinned(): List<AppEntry> {
         val by = apps.associateBy { it.key }
@@ -527,15 +547,14 @@ class MainActivity : Activity() {
             Category.FREQUENT -> listOf(null to apps.map { it to launchCount(it) }
                 .filter { it.second > 0 }.sortedByDescending { it.second }.take(24).map { it.first })
             Category.MEDIA -> listOf(null to apps.filter { isMedia(it) })
-            Category.GAMES -> listOf(null to apps.filter { isGame(it) })
             Category.DOWNLOADS -> listOf(null to apps.filter { it.isUser })
-            Category.WIDGETS, Category.HUB, Category.QUICK -> emptyList()
+            Category.WIDGETS, Category.HUB, Category.QUICK, Category.GAMES -> emptyList()
         }
         return out.filter { it.second.isNotEmpty() }
     }
 
     private fun makeTile(e: AppEntry, bar: Boolean = false): IconTile {
-        val t = if (bar) IconTile(this, e, (barCellDp * 0.62f).toInt(), showLabel = true)
+        val t = if (bar) IconTile(this, e, (barCellDp * 0.62f).toInt(), showLabel = Prefs.bool(this, Prefs.BAR_LABELS, true))
         else IconTile(this, e, (cellDp * 0.8f).toInt())
         t.setOnClickListener { launch(e) }
         t.setOnLongClickListener { showOptions(e); true }
@@ -561,7 +580,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun isPanel() = category == Category.WIDGETS || category == Category.HUB || category == Category.QUICK
+    private fun isPanel() = category == Category.WIDGETS || category == Category.HUB || category == Category.QUICK || category == Category.GAMES
 
     private fun isFull() = expanded || searching || isPanel()
 
@@ -574,7 +593,7 @@ class MainActivity : Activity() {
         if (!::root.isInitialized) return
         val focus = currentFocus
         val wasGrid = focus == null || focus is IconTile || focus is WidgetFrame || focus is HubRow ||
-            focus is QuickTile || focus?.tag == "addwidget"
+            focus is QuickTile || focus is CoverTile || focus?.tag == "addwidget" || focus?.tag == "gamecat"
         val panelIdx = if (focus?.parent === gridHost) gridHost.indexOfChild(focus) else -1
         val focusedKey = (focus as? IconTile)?.entry?.key
         barRow.removeAllViews()
@@ -605,7 +624,7 @@ class MainActivity : Activity() {
         if (flat.isEmpty()) { caption.text = ""; captionFloat.text = "" }
         if (wasGrid && panel) {
             val keep = if (panelIdx >= 0) gridHost.getChildAt(panelIdx.coerceAtMost(gridHost.childCount - 1)) else null
-            (keep?.takeIf { it.isFocusable } ?: firstFocusableIn(gridHost))?.requestFocus()
+            (if (category == Category.GAMES) gameFocusRow() else (keep?.takeIf { it.isFocusable } ?: firstFocusableIn(gridHost)))?.requestFocus()
         } else if (wasGrid) {
             val tiles = allTiles()
             (tiles.firstOrNull { it.entry.key == focusedKey } ?: tiles.firstOrNull())?.requestFocus()
@@ -623,7 +642,7 @@ class MainActivity : Activity() {
     }
 
     private fun focusFirst() {
-        if (isPanel() && !searching) firstFocusableIn(gridHost)?.requestFocus()
+        if (isPanel() && !searching) (if (category == Category.GAMES) gameFocusRow() else firstFocusableIn(gridHost))?.requestFocus()
         else allTiles().firstOrNull()?.requestFocus()
     }
 
@@ -634,6 +653,134 @@ class MainActivity : Activity() {
         rebuildGrid()
         homeScroll.scrollTo(0, 0)
         barScroll.scrollTo(0, 0)
+    }
+
+    // ───────────────────────── Games page ─────────────────────────
+
+    private var romCache: List<Game>? = null
+    private var gameList: List<Game> = emptyList()
+    private var gameCat = "recent"
+    private val gameCatRows = ArrayList<TextView>()
+    private lateinit var gameGrid: TileGrid
+    private lateinit var gameInfo: TextView
+
+    private fun refreshGameList() {
+        gameList = Games.androidGames(this, apps) + (romCache ?: emptyList())
+    }
+
+    private fun scanGames() {
+        Thread {
+            val roms = try { Games.scanRoms(this) } catch (_: Exception) { emptyList() }
+            handler.post {
+                if (isDestroyed) return@post
+                romCache = roms
+                refreshGameList()
+                if (category == Category.GAMES) rebuildGrid()
+            }
+        }.start()
+    }
+
+    private fun gamesIn(id: String): List<Game> = when {
+        id == "recent" -> gameList.filter { Games.lastPlayed(this, it) > 0 }.sortedByDescending { Games.lastPlayed(this, it) }.take(30)
+        id == "favs" -> { val f = Games.favs(this); gameList.filter { it.id in f } }
+        id == "android" -> gameList.filter { it.app != null }
+        id.startsWith("sys:") -> gameList.filter { it.systemKey == id.removePrefix("sys:") }
+        else -> gameList
+    }
+
+    private fun gameCats(): List<Triple<String, String, Int>> {
+        val out = ArrayList<Triple<String, String, Int>>()
+        gamesIn("recent").size.let { if (it > 0) out.add(Triple("recent", "Recent", it)) }
+        out.add(Triple("favs", "Favourites", gamesIn("favs").size))
+        out.add(Triple("all", "All games", gameList.size))
+        gamesIn("android").size.let { if (it > 0) out.add(Triple("android", "Android", it)) }
+        GameSystems.all.forEach { d -> gamesIn("sys:" + d.key).size.let { if (it > 0) out.add(Triple("sys:" + d.key, d.label, it)) } }
+        return out
+    }
+
+    private fun gameFocusRow(): View? = gameCatRows.firstOrNull { it.isSelected } ?: gameCatRows.firstOrNull()
+
+    private fun buildGamesPanel() {
+        gameCatRows.clear()
+        if (romCache == null) {
+            gridHost.addView(TextView(this).apply {
+                text = "Looking for games…"; textSize = 15f; setTextColor(Theme.TEXT_DIM); gravity = Gravity.CENTER
+                setPadding(dp(16), dp(32), dp(16), dp(32))
+            }, LinearLayout.LayoutParams(-1, -2))
+            refreshGameList()
+            scanGames()
+            return
+        }
+        val cats = gameCats()
+        if (cats.none { it.first == gameCat }) gameCat = cats.first().first
+        val wDp = resources.configuration.screenWidthDp
+        val leftDp = (wDp * 0.27f).toInt().coerceIn(104, 200)
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(4)) }
+        cats.forEach { (id, title, n) ->
+            val r = TextView(this).apply {
+                text = "$title  ($n)"; textSize = 14f; setTextColor(Theme.TEXT); gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(10), dp(10), dp(8), dp(10)); maxLines = 2
+                isFocusable = true; isClickable = true; tag = "gamecat"; isSelected = id == gameCat
+                background = navRowBackground(this@MainActivity)
+                setOnFocusChangeListener { _, has ->
+                    if (has && gameCat != id) { gameCat = id; gameCatRows.forEach { it.isSelected = it === this }; fillGameGrid() }
+                }
+                setOnClickListener { gameGrid.getChildAt(0)?.requestFocus() }
+            }
+            gameCatRows.add(r)
+            left.addView(r, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
+        }
+        val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        gameInfo = TextView(this).apply {
+            textSize = 13f; setTextColor(Theme.TEXT_DIM); setPadding(dp(10), dp(6), dp(10), dp(4)); minLines = 2
+        }
+        right.addView(gameInfo, LinearLayout.LayoutParams(-1, -2))
+        gameGrid = TileGrid(this).apply { columns = ((wDp - leftDp - 16) / 92).coerceIn(2, 6); aspect = 1.3f }
+        right.addView(gameGrid, LinearLayout.LayoutParams(-1, -2))
+        row.addView(left, LinearLayout.LayoutParams(dp(leftDp), -2))
+        row.addView(right, LinearLayout.LayoutParams(0, -2, 1f))
+        gridHost.addView(row, LinearLayout.LayoutParams(-1, -2))
+        fillGameGrid()
+    }
+
+    private fun gameDescription(g: Game): String {
+        val n = Games.played(this, g)
+        val last = Games.lastPlayed(this, g)
+        val played = if (n == 0) "not played yet" else "played $n× · " +
+            DateUtils.getRelativeTimeSpanString(last, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+        return "${g.title}\n${g.systemLabel} · $played"
+    }
+
+    private fun fillGameGrid() {
+        gameGrid.removeAllViews()
+        val favs = Games.favs(this)
+        val list = gamesIn(gameCat)
+        gameInfo.text = (gameCatRows.firstOrNull { it.isSelected }?.text?.toString() ?: "") +
+            if (list.isEmpty()) "\nNo games here yet. Put ROMs in a system folder (see Launcher settings → Games)." else "\nA to play, X for options"
+        list.forEach { g ->
+            val t = CoverTile(this, g, g.id in favs)
+            t.setOnClickListener { playGame(g) }
+            t.setOnLongClickListener { gameMenu(g); true }
+            t.setOnFocusChangeListener { _, has -> if (has) gameInfo.text = gameDescription(g) }
+            gameGrid.addView(t)
+        }
+    }
+
+    private fun playGame(g: Game) {
+        val err = Games.launch(this, g)
+        if (err != null) Toast.makeText(this, err, Toast.LENGTH_LONG).show()
+        else if (g.app != null) prefs.edit().putInt("cnt_" + g.app.key, launchCount(g.app) + 1).apply()
+    }
+
+    private fun gameMenu(g: Game) {
+        val fav = g.id in Games.favs(this)
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        actions += "Play" to { playGame(g) }
+        actions += (if (fav) "Remove from Favourites" else "Add to Favourites") to { Games.toggleFav(this, g); rebuildGrid() }
+        g.app?.let { a -> actions += "Remove from Games" to { Games.setTag(this, a, false); refreshGameList(); rebuildGrid() } }
+        actions += "Rescan games" to { romCache = null; rebuildGrid() }
+        showMenu(g.title, actions)
     }
 
     // ───────────────────────── panels: Hub & Quick Settings ─────────────────────────
@@ -649,6 +796,7 @@ class MainActivity : Activity() {
             Category.WIDGETS -> buildWidgetPanel()
             Category.HUB -> buildHubPanel()
             Category.QUICK -> buildQuickPanel()
+            Category.GAMES -> buildGamesPanel()
             else -> {}
         }
     }
@@ -716,24 +864,25 @@ class MainActivity : Activity() {
     // ── Quick Settings: toggles that Android lets a launcher change ──
 
     private val quickIds = listOf("sound", "volume", "brightness", "wifi", "bluetooth", "airplane", "dnd",
-        "rotation", "torch", "battery", "settings")
+        "rotation", "torch", "battery", "slate", "settings")
     private val quickTiles = HashMap<String, QuickTile>()
     private var torchOn = false
 
     private fun audio() = getSystemService(AUDIO_SERVICE) as AudioManager
 
     private fun quickMeta(id: String): Triple<String, String?, String?> = when (id) {
-        "sound" -> Triple("Sound profile", "sound", null)
-        "volume" -> Triple("Media volume", "music", null)
-        "brightness" -> Triple("Brightness", null, "☀")
-        "wifi" -> Triple("Wi-Fi", "wifi", null)
-        "bluetooth" -> Triple("Bluetooth", "bluetooth", null)
-        "airplane" -> Triple("Airplane mode", "airplane", null)
+        "sound" -> Triple("Sound profile", "ui:tango_audio-volume-high", null)
+        "volume" -> Triple("Media volume", "ui:tango_audio-volume-medium", null)
+        "brightness" -> Triple("Brightness", "ui:tango_weather-clear", null)
+        "wifi" -> Triple("Wi-Fi", "ui:tango_network-wireless", null)
+        "bluetooth" -> Triple("Bluetooth", "ui:elem_bluetooth", null)
+        "airplane" -> Triple("Airplane mode", "ui:sym_airplane-mode", null)
         "dnd" -> Triple("Do not disturb", "dnd", null)
-        "rotation" -> Triple("Rotation", null, "⟳")
-        "torch" -> Triple("Flashlight", null, "🔦")
-        "battery" -> Triple("Battery saver", null, "🔋")
-        else -> Triple("All settings", "settings", null)
+        "rotation" -> Triple("Rotation", "ui:elem_object-rotate-right", null)
+        "torch" -> Triple("Flashlight", "ui:sym_keyboard-brightness", null)
+        "battery" -> Triple("Battery saver", "ui:tango_battery", null)
+        "slate" -> Triple("Launcher settings", "ui:elem_preferences-desktop-theme", null)
+        else -> Triple("All settings", "ui:tango_applications-system", null)
     }
 
     private fun buildQuickPanel() {
@@ -758,9 +907,9 @@ class MainActivity : Activity() {
         quickTiles.forEach { (id, t) ->
             t.setState(quickState(id))
             if (id == "sound") t.setIcon(when (audio().ringerMode) {
-                AudioManager.RINGER_MODE_NORMAL -> "sound"
+                AudioManager.RINGER_MODE_NORMAL -> "ui:tango_audio-volume-high"
                 AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
-                else -> "mute"
+                else -> "ui:sym_notification-disabled"
             })
         }
     }
@@ -855,6 +1004,7 @@ class MainActivity : Activity() {
             }
             "torch" -> toggleTorch()
             "battery" -> startFirst(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS))
+            "slate" -> startActivity(Intent(this, SettingsActivity::class.java))
             else -> startFirst(Intent(Settings.ACTION_SETTINGS))
         }
     }
@@ -936,6 +1086,15 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_IMAGE) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null && pendingIconKey.isNotEmpty()) {
+                val src = IconStore.importImage(this, uri, pendingIconKey)
+                if (src != null) { IconStore.setOverride(this, pendingIconKey, src); refreshApps() }
+                else Toast.makeText(this, "Couldn't read that image", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
         if (requestCode != REQ_BIND && requestCode != REQ_CONFIG) return
         val id = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)?.takeIf { it >= 0 } ?: pendingWidgetId
         if (id < 0) return
@@ -1058,11 +1217,49 @@ class MainActivity : Activity() {
         if (isFav && favs.indexOf(e.key) < favs.size - 1) actions += "Move right" to {
             val i = favs.indexOf(e.key); favs.removeAt(i); favs.add(i + 1, e.key); saveFavorites(favs); rebuildGrid()
         }
+        actions += (if (isGame(e)) "Remove from Games" else "Add to Games") to {
+            Games.setTag(this, e, !isGame(e)); refreshGameList(); rebuildGrid()
+        }
+        actions += "Change icon" to {
+            IconPicker.show(this, e.key, e.label, onPickImage = { pendingIconKey = e.key; pickImage() }, onChanged = { refreshApps() })
+        }
+        actions += "Rename" to {
+            Dialogs.prompt(this, "Rename app", e.label, "Name") { n ->
+                val o = IconStore.labelOverrides(this)
+                if (n.isEmpty()) o.remove(e.key) else o.put(e.key, n)
+                Prefs.setJson(this, Prefs.LABEL_OVERRIDES, o); Prefs.bumpIcons(this); refreshApps()
+            }
+        }
+        actions += "Hide" to {
+            val h = IconStore.hidden(this); h.add(e.key); Prefs.setStrSet(this, Prefs.HIDDEN, h); Prefs.bumpIcons(this)
+            Toast.makeText(this, "${e.label} hidden. Show it again in Launcher settings → Apps.", Toast.LENGTH_LONG).show()
+            refreshApps()
+        }
         actions += "App info" to {
             startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", e.pkg, null)))
         }
         actions += "Uninstall" to { startActivity(Intent(Intent.ACTION_DELETE, Uri.fromParts("package", e.pkg, null))) }
         showMenu(e.label, actions)
+    }
+
+    private fun pickImage() {
+        startActivityForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*"), REQ_IMAGE
+        )
+    }
+
+    private fun menuIcon(label: String): String? = when {
+        label.startsWith("Add to Fav") || label.startsWith("Remove from Fav") -> "ui:tango_emblem-favorite"
+        label == "App info" -> "ui:tango_dialog-information"
+        label == "Uninstall" || label == "Hide" || label == "Dismiss" || label.startsWith("Dismiss all") ||
+            label.startsWith("Clear all") || label == "Remove widget" -> "ui:tango_edit-delete"
+        label == "Change icon" -> "ui:elem_preferences-desktop-theme"
+        label == "Rename" -> "ui:tango_document-properties"
+        label == "Move left" -> "ui:tango_go-previous"
+        label == "Add widget" -> "ui:tango_list-add"
+        label.startsWith("Rescan") -> "ui:tango_view-refresh"
+        label.contains("Games") -> "ui:elem_applications-games"
+        else -> null
     }
 
     private fun showMenu(title: String, actions: List<Pair<String, () -> Unit>>) {
@@ -1080,9 +1277,13 @@ class MainActivity : Activity() {
         val rows = actions.map { (label, act) ->
             TextView(this).apply {
                 text = label; textSize = 18f; setTextColor(Theme.TEXT)
-                setPadding(dp(16), dp(13), dp(16), dp(13))
+                setPadding(dp(16), dp(11), dp(16), dp(11))
                 isFocusable = true; isClickable = true
+                gravity = Gravity.CENTER_VERTICAL
                 background = focusGlow(context, 6, 1)
+                menuIcon(label)?.let { n -> BbIcons.any(context, n) }?.let { ic ->
+                    ic.setBounds(0, 0, dp(28), dp(28)); setCompoundDrawables(ic, null, null, null); compoundDrawablePadding = dp(12)
+                }
                 setOnClickListener { d.dismiss(); act() }
             }
         }
@@ -1097,7 +1298,7 @@ class MainActivity : Activity() {
             setGravity(Gravity.BOTTOM)
         }
         d.setOnKeyListener { _, code, ev ->
-            when (code) {
+            when (Prefs.mapKey(this, code)) {
                 KeyEvent.KEYCODE_BUTTON_A -> { if (ev.action == KeyEvent.ACTION_UP) d.currentFocus?.performClick(); true }
                 KeyEvent.KEYCODE_BUTTON_B -> { if (ev.action == KeyEvent.ACTION_UP) d.dismiss(); true }
                 else -> false
@@ -1152,8 +1353,9 @@ class MainActivity : Activity() {
     }
 
     private fun shiftCategory(delta: Int) {
-        val all = Category.values()
-        setCategory(all[(category.ordinal + delta + all.size) % all.size])
+        val all = cats()
+        val cur = all.indexOf(category).let { if (it < 0) 0 else it }
+        setCategory(all[(cur + delta + all.size) % all.size])
     }
 
     private fun onConfirm() {
@@ -1168,6 +1370,7 @@ class MainActivity : Activity() {
             is WidgetFrame -> showWidgetMenu(f.widgetId)
             is HubRow -> f.key?.let { showHubMenu(it) }
             is QuickTile -> { quickSecondary(f.id); refreshQuick() }
+            is CoverTile -> gameMenu(f.game)
             is TextView -> if (f.tag == "addwidget") showWidgetPicker()
             is CounterChip -> if (f.kind != "search") clearCounter(f.kind)
         }
@@ -1182,7 +1385,7 @@ class MainActivity : Activity() {
     override fun dispatchKeyEvent(e: KeyEvent): Boolean {
         val up = e.action == KeyEvent.ACTION_UP
         val down = e.action == KeyEvent.ACTION_DOWN
-        when (e.keyCode) {
+        when (Prefs.mapKey(this, e.keyCode)) {
             KeyEvent.KEYCODE_BUTTON_A -> { if (up) onConfirm(); return true }
             KeyEvent.KEYCODE_BUTTON_B -> { if (up) handleBack(); return true }
             KeyEvent.KEYCODE_BUTTON_X -> { if (up) onOptions(); return true }
@@ -1191,7 +1394,7 @@ class MainActivity : Activity() {
                 return true
             }
             KeyEvent.KEYCODE_BUTTON_SELECT -> {
-                if (up) startActivity(Intent(Settings.ACTION_SETTINGS))
+                if (up) startActivity(Intent(this, SettingsActivity::class.java))
                 return true
             }
             KeyEvent.KEYCODE_BUTTON_L1 -> { if (up) shiftCategory(-1); return true }

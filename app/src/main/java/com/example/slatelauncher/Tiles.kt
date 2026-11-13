@@ -180,7 +180,7 @@ class QuickTile(ctx: Context, val id: String, title: String, iconName: String?, 
         background = focusGlow(ctx, 8, 3)
         val plate = FrameLayout(ctx).apply { background = iconPlate(ctx) }
         if (iconName != null) {
-            iconView.setImageDrawable(BbIcons.drawable(ctx, iconName))
+            iconView.setImageDrawable(BbIcons.any(ctx, iconName))
             iconView.scaleType = ImageView.ScaleType.FIT_CENTER
             val p = ctx.dp(6)
             iconView.setPadding(p, p, p, p)
@@ -202,6 +202,48 @@ class QuickTile(ctx: Context, val id: String, title: String, iconName: String?, 
     fun setState(text: String) { stateView.text = text }
 
     fun setIcon(name: String) {
-        BbIcons.drawable(context, name)?.let { iconView.setImageDrawable(it) }
+        BbIcons.any(context, name)?.let { iconView.setImageDrawable(it) }
     }
+}
+
+/** A game on the Games page: cover art (or the app / system icon) with its title along the bottom. */
+class CoverTile(ctx: Context, val game: Game, fav: Boolean) : FrameLayout(ctx) {
+    private val img = ImageView(ctx)
+    private val heart = TextView(ctx)
+
+    init {
+        isFocusable = true
+        isClickable = true
+        background = focusGlow(ctx, 8, 2)
+        val box = FrameLayout(ctx).apply { background = ChromeDrawable(ctx, 6f, dark = true) }
+        addView(box, LayoutParams(-1, -1).apply { setMargins(ctx.dp(5), ctx.dp(5), ctx.dp(5), ctx.dp(7)) })
+        img.scaleType = ImageView.ScaleType.CENTER_CROP
+        box.addView(img, LayoutParams(-1, -1).apply { setMargins(ctx.dp(2), ctx.dp(2), ctx.dp(2), ctx.dp(3)) })
+        when {
+            game.art != null -> Covers.load(game.art, 320) { b -> if (b != null) img.setImageBitmap(b) }
+            game.app != null -> {
+                img.scaleType = ImageView.ScaleType.FIT_CENTER
+                img.setPadding(ctx.dp(18), ctx.dp(10), ctx.dp(18), ctx.dp(30))
+                img.setImageDrawable(game.app.icon)
+            }
+            else -> {
+                img.scaleType = ImageView.ScaleType.FIT_CENTER
+                img.setPadding(ctx.dp(22), ctx.dp(14), ctx.dp(22), ctx.dp(34))
+                BbIcons.ui(ctx, "elem_input-gaming")?.let { img.setImageDrawable(it) }
+            }
+        }
+        box.addView(TextView(ctx).apply {
+            text = game.title; textSize = 11f; setTextColor(Theme.TEXT); gravity = Gravity.CENTER
+            maxLines = 2; ellipsize = TextUtils.TruncateAt.END
+            setShadowLayer(3f, 0f, 1f, 0xFF000000.toInt())
+            setPadding(ctx.dp(4), ctx.dp(14), ctx.dp(4), ctx.dp(4))
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0xCC000000.toInt())
+            )
+        }, LayoutParams(-1, -2, Gravity.BOTTOM))
+        heart.apply { text = "♥"; textSize = 14f; setTextColor(0xFFFF4D5A.toInt()); setShadowLayer(3f, 0f, 1f, 0xFF000000.toInt()); visibility = if (fav) VISIBLE else GONE }
+        box.addView(heart, LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, ctx.dp(3), ctx.dp(6), 0) })
+    }
+
+    fun setFav(on: Boolean) { heart.visibility = if (on) VISIBLE else GONE }
 }

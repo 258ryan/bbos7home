@@ -61,3 +61,14 @@ fun selectedPill(ctx: Context): Drawable = GradientDrawable(
 
 /** Navy glass banner block (date, clock, counters), as on OS 7. */
 fun bannerBackground(ctx: Context): Drawable = GlassBarDrawable(ctx)
+
+/** Row in a navigation list (left pane): gel when focused, dim gel while it is the current page. */
+fun navRowBackground(ctx: Context): Drawable {
+    val gel = GelDrawable(ctx, 0xFF4DA3F5.toInt(), 0xFF1668C6.toInt(), 8f, glow = true)
+    val dim = GelDrawable(ctx, 0xFF4DA3F5.toInt(), 0xFF1668C6.toInt(), 8f).apply { alpha = 90 }
+    return StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_focused), gel)
+        addState(intArrayOf(android.R.attr.state_selected), dim)
+        addState(intArrayOf(), ColorDrawable(Color.TRANSPARENT))
+    }
+}

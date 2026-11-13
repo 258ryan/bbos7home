@@ -24,6 +24,11 @@ import kotlin.math.sin
  * bevelled chrome, stitched edges. No image assets; everything is drawn at runtime.
  */
 object Materials {
+    /** Turned off in settings for speed: bars fall back to flat gradients. */
+    @Volatile var enabled = true
+
+    private fun flat(top: Int, bottom: Int): Drawable = shade(top, bottom)
+
     private val cache = HashMap<String, Bitmap>()
 
     private fun make(name: String, size: Int, px: (Int, Int, Random) -> Int): Bitmap = cache.getOrPut(name) {
@@ -63,14 +68,16 @@ object Materials {
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(top, bottom))
 
     /** Leather, lit from above. */
-    fun leatherTiled(ctx: Context): Drawable =
+    fun leatherTiled(ctx: Context): Drawable = if (!enabled) flat(0xFF2E3034.toInt(), 0xFF141517.toInt()) else
         LayerDrawable(arrayOf(tiled(ctx, leather()), shade(0x22FFFFFF, 0x66000000)))
 
     /** Translucent leather used as the dimmer behind expanded panels. */
-    fun dimLeather(ctx: Context, alpha: Int = 232): Drawable = tiled(ctx, leather()).apply { this.alpha = alpha }
+    fun dimLeather(ctx: Context, alpha: Int = 232): Drawable =
+        if (!enabled) android.graphics.drawable.ColorDrawable(Color.argb(alpha, 8, 9, 10))
+        else tiled(ctx, leather()).apply { this.alpha = alpha }
 
     /** Brushed-metal band (folder strip). */
-    fun metalBand(ctx: Context): Drawable =
+    fun metalBand(ctx: Context): Drawable = if (!enabled) flat(0xFF4A4D52.toInt(), 0xFF1B1C1E.toInt()) else
         LayerDrawable(arrayOf(tiled(ctx, brushed()), shade(0x40FFFFFF, 0x80000000.toInt())))
 
     /** Leather with a dashed cream stitch line inset from the edge. */
