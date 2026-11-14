@@ -1,0 +1,3 @@
+name=slate-skin
+description=Skeuomorphic system widgets: gel buttons, recessed switches, sliders and progress bars, glass dialogs and menus, groove text-field underline. Works on any build. Install enable-any.fix.zip too if your release's hotfix applier is older than build=any. Uses one of the optional theme overlays (icon shape, accent colour, font, cutout) as its slot, so that one choice stops working.
+build=any

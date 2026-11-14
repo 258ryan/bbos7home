@@ -3,7 +3,12 @@
     package="com.slate.skin.android"
     android:versionCode="1"
     android:versionName="0.1">
-    <!-- Overlay on the framework. Magisk copies it into the product partition; service.sh enables it with `cmd overlay`. -->
-    <overlay android:targetPackage="android" android:priority="1000" />
+    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="29" />
+    <!--
+      Static overlay on the framework: applied at boot, nothing to enable.
+      android:required is a placeholder: tools/patch_isstatic.py turns it into android:isStatic after compiling
+      (the SDK jar has no isStatic, so aapt2 cannot compile it directly).
+    -->
+    <overlay android:targetPackage="android" android:priority="1000" android:required="true" />
     <application android:label="Slate Skin (framework)" android:hasCode="false" />
 </manifest>
