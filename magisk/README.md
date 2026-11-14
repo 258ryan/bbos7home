@@ -23,6 +23,12 @@ The andr36oid ROM can apply `.fix.zip` hotfixes from the SD card before Android 
 5. Undo: delete the zip from the `hotfix` folder. Skip it once: hold **Start+Select** while powering on.
    The ROM's own boot protection pauses all hotfixes after two starts that do not finish.
 
+**"Skipped - for a different build"?** Older releases only run a hotfix whose `build=` line equals the console's build
+exactly (`<andr36oid version>|<incremental>`) and ignore `build=any`. Either install `enable-any.fix.zip` (if your release is the one
+it names), or build a zip for your exact build: GitHub -> Actions -> **Magisk module** -> *Run workflow* -> put your build in the
+`build` box. Read it from Settings -> About: *andr36oid version* (e.g. `v2026-10-24-release`) and *Build number*
+(the part like `eng.kenny.20261024.175043`), joined with `|`.
+
 How it works: `files/0` is a *static* overlay on framework-res. The system image is read-only and overlays are only trusted
 inside a system overlay folder, so `hotfix.sh` binds the overlay APK over one of the optional theme overlays (icon shape,
 accent colour, icon pack, cutout, font) with the applier's `hotfix_bind`. Hotfixes run before zygote, so the package manager sees it

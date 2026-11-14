@@ -5,6 +5,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 : "${AAPT2:=aapt2}"
 : "${ANDROID_JAR:?set ANDROID_JAR to an android.jar (API 23 or newer)}"
+# BUILD_TAG: what the hotfix manifest asks for. "any" works only where the ROM's applier knows build=any
+# (or enable-any.fix.zip is installed). Older releases need the console's exact "<ro.andr36oid.version>|<incremental>".
+BUILD_TAG=${BUILD_TAG:-any}
 VERSION=$(grep '^version=' module/module.prop | cut -d= -f2)
 rm -rf build out && mkdir -p build/overlays out
 for dir in overlays/*/; do
@@ -28,7 +31,9 @@ cp -r module/. build/
 # 2) andr36oid hotfix (no root): BOOT/hotfix/slate-skin.fix.zip. Layout as the ROM's applier expects:
 #    manifest.txt, hotfix.sh, files/0 (the overlay APK).
 rm -rf build/fix && mkdir -p build/fix/files
-cp hotfix/manifest.txt hotfix/hotfix.sh build/fix/
+sed "s#^build=.*#build=$BUILD_TAG#" hotfix/manifest.txt > build/fix/manifest.txt
+cp hotfix/hotfix.sh build/fix/
+grep "^build=" build/fix/manifest.txt
 cp build/overlays/SlateSkin-android.apk build/fix/files/0
 (cd build/fix && zip -qX -D ../../out/slate-skin.fix.zip manifest.txt hotfix.sh files/0)
 
