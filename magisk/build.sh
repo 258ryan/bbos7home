@@ -15,11 +15,15 @@ for dir in overlays/*/; do
     --manifest "$dir/AndroidManifest.xml" --min-sdk-version 29 --target-sdk-version 29 \
     -R "build/$name-res.zip" --auto-add-overlay
   python3 tools/patch_isstatic.py "build/$name-raw.apk" "build/overlays/SlateSkin-$name.apk"
+  # Verify: the compiled manifest must now carry attribute 0x0101055a (isStatic) = true, or the build stops.
+  "$AAPT2" dump xmltree --file AndroidManifest.xml "build/overlays/SlateSkin-$name.apk" | tee "build/$name-manifest.txt" \
+    | grep -E "overlay|0x0101055a|0x0101001c|0x01010021" || true
+  grep -q '(0x0101055a)=true' "build/$name-manifest.txt" || { echo "isStatic missing from $name overlay manifest" >&2; exit 1; }
 done
 
 # 1) Magisk module (needs root)
 cp -r module/. build/
-(cd build && rm -f "../out/slate-skin-$VERSION.zip" && zip -qr "../out/slate-skin-$VERSION.zip" . -x "*-res.zip" -x "*-raw.apk")
+(cd build && rm -f "../out/slate-skin-$VERSION.zip" && zip -qr "../out/slate-skin-$VERSION.zip" . -x "*-res.zip" -x "*-raw.apk" -x "*-manifest.txt")
 
 # 2) andr36oid hotfix (no root): BOOT/hotfix/slate-skin.fix.zip. Layout as the ROM's applier expects:
 #    manifest.txt, hotfix.sh, files/0 (the overlay APK).
