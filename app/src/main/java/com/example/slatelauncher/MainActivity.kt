@@ -115,6 +115,9 @@ class MainActivity : Activity() {
     private var cols = 6
     private var cellDp = 60
     private var barCellDp = 90
+    private var barIconDp = 52
+    /** Short screens (handhelds, landscape phones): smaller banner, strip, bar and hint bar. */
+    private var compactUi = false
 
     private val alarmReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) = refreshAlarm()
@@ -207,6 +210,7 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     private fun buildUi(): View {
+        compactUi = resources.configuration.screenHeightDp < 560
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -220,45 +224,45 @@ class MainActivity : Activity() {
         val clockBox = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
         clockBox.addView(TextClock(this).apply {
             format12Hour = "h:mm"; format24Hour = "H:mm"
-            textSize = 44f; setTextColor(Theme.TEXT)
+            textSize = if (compactUi) 34f else 44f; setTextColor(Theme.TEXT)
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
             includeFontPadding = false
         })
         if (!DateFormat.is24HourFormat(this)) clockBox.addView(TextClock(this).apply {
             format12Hour = "a"; format24Hour = "a"
-            textSize = 14f; setTextColor(Theme.TEXT); setPadding(dp(3), 0, 0, dp(6))
+            textSize = if (compactUi) 12f else 14f; setTextColor(Theme.TEXT); setPadding(dp(3), 0, 0, dp(if (compactUi) 4 else 6))
         })
         header.addView(clockBox, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL))
         header.addView(TextClock(this).apply {
             format12Hour = "EEE, MMM d"; format24Hour = "EEE, MMM d"
-            textSize = 14f; setTextColor(Theme.TEXT); setShadowLayer(4f, 0f, 1f, Color.BLACK)
-        }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { topMargin = dp(4) })
-        batteryText = TextView(this).apply { textSize = 14f; setTextColor(Theme.TEXT); setShadowLayer(4f, 0f, 1f, Color.BLACK) }
+            textSize = if (compactUi) 12f else 14f; setTextColor(Theme.TEXT); setShadowLayer(4f, 0f, 1f, Color.BLACK)
+        }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { topMargin = dp(3) })
+        batteryText = TextView(this).apply { textSize = if (compactUi) 12f else 14f; setTextColor(Theme.TEXT); setShadowLayer(4f, 0f, 1f, Color.BLACK) }
         header.addView(batteryText, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = dp(4) })
         banner.addView(header, LinearLayout.LayoutParams(-1, -2))
 
         // Counters: sound profile (left), phone / messages / mail (centre), search (right)
         addHairline(banner)
-        phoneChip = CounterChip(this, BbIcons.drawable(this, "phone"), "phone")
-        msgChip = CounterChip(this, BbIcons.drawable(this, "messages"), "msg")
-        mailChip = CounterChip(this, BbIcons.drawable(this, "mail"), "mail")
+        phoneChip = CounterChip(this, BbIcons.drawable(this, "phone"), "phone", compactUi)
+        msgChip = CounterChip(this, BbIcons.drawable(this, "messages"), "msg", compactUi)
+        mailChip = CounterChip(this, BbIcons.drawable(this, "mail"), "mail", compactUi)
         phoneChip.setOnClickListener { startFirst(Intent(Intent.ACTION_DIAL)) }
         msgChip.setOnClickListener { startFirst(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MESSAGING)) }
         mailChip.setOnClickListener { startFirst(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_EMAIL)) }
-        val searchChip = CounterChip(this, BbIcons.drawable(this, "search"), "search").apply {
+        val searchChip = CounterChip(this, BbIcons.drawable(this, "search"), "search", compactUi).apply {
             setOnClickListener { if (searching) closeSearch() else openSearch("") }
         }
-        alarmChip = CounterChip(this, BbIcons.drawable(this, "clock"), "alarm").apply {
+        alarmChip = CounterChip(this, BbIcons.drawable(this, "clock"), "alarm", compactUi).apply {
             visibility = View.GONE
             setOnClickListener { startFirst(Intent(AlarmClock.ACTION_SHOW_ALARMS)) }
         }
-        val soundChip = CounterChip(this, BbIcons.drawable(this, "sound"), "sound").apply {
+        val soundChip = CounterChip(this, BbIcons.drawable(this, "sound"), "sound", compactUi).apply {
             setOnClickListener { setCategory(Category.QUICK) }
         }
         val counters = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(2), dp(8), dp(2))
+            setPadding(dp(8), dp(if (compactUi) 1 else 2), dp(8), dp(if (compactUi) 1 else 2))
             addView(soundChip, LinearLayout.LayoutParams(-2, -2))
             addView(alarmChip, LinearLayout.LayoutParams(-2, -2))
             addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
@@ -271,7 +275,7 @@ class MainActivity : Activity() {
         banner.addView(counters, LinearLayout.LayoutParams(-1, -2))
         root.addView(banner, LinearLayout.LayoutParams(-1, -2))
         addHairline(root)
-        root.addView(View(this).apply { background = Materials.shadowStrip() }, LinearLayout.LayoutParams(-1, dp(5)))
+        root.addView(View(this).apply { background = Materials.shadowStrip() }, LinearLayout.LayoutParams(-1, dp(3)))
 
         // Search bar (hidden until used)
         searchBar = EditText(this).apply {
@@ -304,12 +308,13 @@ class MainActivity : Activity() {
 
         // Folder strip: previous (dim) | current | next (dim)
         addHairline(root)
-        pagerPrev = pagerLabel(18f, Theme.TEXT_DIM, Gravity.START or Gravity.CENTER_VERTICAL) { shiftCategory(-1) }
-        pagerCur = pagerLabel(22f, Theme.TEXT, Gravity.CENTER) { }
-        pagerNext = pagerLabel(18f, Theme.TEXT_DIM, Gravity.END or Gravity.CENTER_VERTICAL) { shiftCategory(1) }
+        val sideSz = if (compactUi) 14f else 18f
+        pagerPrev = pagerLabel(sideSz, Theme.TEXT_DIM, Gravity.START or Gravity.CENTER_VERTICAL) { shiftCategory(-1) }
+        pagerCur = pagerLabel(if (compactUi) 18f else 22f, Theme.TEXT, Gravity.CENTER) { }
+        pagerNext = pagerLabel(sideSz, Theme.TEXT_DIM, Gravity.END or Gravity.CENTER_VERTICAL) { shiftCategory(1) }
         val strip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(12), dp(5), dp(12), dp(5))
+            setPadding(dp(12), dp(if (compactUi) 2 else 5), dp(12), dp(if (compactUi) 2 else 5))
             background = Materials.metalBand(context)
             addView(pagerPrev, LinearLayout.LayoutParams(0, -2, 1f))
             addView(pagerCur, LinearLayout.LayoutParams(0, -2, 1.3f))
@@ -317,14 +322,13 @@ class MainActivity : Activity() {
         }
         root.addView(strip, LinearLayout.LayoutParams(-1, -2))
         addHairline(root)
-        root.addView(View(this).apply { background = Materials.shadowStrip() }, LinearLayout.LayoutParams(-1, dp(5)))
 
         // Name of the focused icon (expanded view only; collapsed uses captionFloat above the strip)
         caption = TextView(this).apply {
             visibility = View.GONE
-            textSize = 13f; setTextColor(Theme.TEXT_DIM); gravity = Gravity.CENTER
+            textSize = if (compactUi) 12f else 13f; setTextColor(Theme.TEXT_DIM); gravity = Gravity.CENTER
             maxLines = 1; setShadowLayer(3f, 0f, 1f, Color.BLACK)
-            setPadding(dp(8), dp(2), dp(8), dp(2))
+            setPadding(dp(8), dp(1), dp(8), dp(1))
         }
         root.addView(caption, LinearLayout.LayoutParams(-1, -2))
 
@@ -335,11 +339,14 @@ class MainActivity : Activity() {
         root.addView(emptyText, LinearLayout.LayoutParams(-1, -2))
 
         // Collapsed: one horizontally scrolling app bar
-        barRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false }
+        barRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; clipChildren = false
+            setPadding(dp(4), dp(3), dp(4), dp(3))
+        }
         barScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = Materials.stitchedLeather(context, 4)
+            background = Materials.stitchedLeather(context, 3)
             addView(barRow, ViewGroup.LayoutParams(-2, -2))
         }
         root.addView(barScroll, LinearLayout.LayoutParams(-1, -2))
@@ -363,12 +370,13 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             background = Materials.dimLeather(context, 250)
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setPadding(dp(6), dp(if (compactUi) 2 else 6), dp(6), dp(if (compactUi) 2 else 6))
         }
         root.addView(hintBar, LinearLayout.LayoutParams(-1, -2))
         root.setOnApplyWindowInsetsListener { _, ins ->
             banner.setPadding(0, ins.systemWindowInsetTop, 0, 0)
-            hintBar.setPadding(dp(6), dp(6), dp(6), dp(6) + ins.systemWindowInsetBottom)
+            val v = if (compactUi) 2 else 6
+            hintBar.setPadding(dp(6), dp(v), dp(6), dp(v) + ins.systemWindowInsetBottom)
             ins
         }
         return root
@@ -377,7 +385,7 @@ class MainActivity : Activity() {
     private fun pagerLabel(size: Float, color: Int, gravity: Int, onClick: () -> Unit) = TextView(this).apply {
         textSize = size; setTextColor(color); this.gravity = gravity
         maxLines = 1; setShadowLayer(3f, 0f, 1f, Color.BLACK)
-        setPadding(0, dp(4), 0, dp(4))
+        setPadding(0, dp(if (compactUi) 2 else 4), 0, dp(if (compactUi) 2 else 4))
         setOnClickListener { onClick() }
     }
 
@@ -386,8 +394,11 @@ class MainActivity : Activity() {
         val forced = Prefs.int(this, Prefs.COLS, 0)
         cols = if (forced > 0) forced.coerceIn(3, 10) else (wDp / 70).coerceIn(5, 9)
         cellDp = wDp / cols
-        val barCols = if (forced > 0) forced.coerceIn(3, 8) else (wDp / 90).coerceIn(4, 8)
+        val hDp = resources.configuration.screenHeightDp
+        val barCols = if (forced > 0) forced.coerceIn(3, 9) else (wDp / 84).coerceIn(4, 9)
         barCellDp = wDp / barCols
+        // Icon size follows both the cell width and the screen height, so the bar never dominates a short screen.
+        barIconDp = minOf((barCellDp * 0.56f).toInt(), (hDp * 0.095f).toInt()).coerceAtLeast(34)
     }
 
     /** Show/hide pieces for collapsed (app bar over wallpaper) vs expanded (dimmed full grid). */
@@ -406,14 +417,15 @@ class MainActivity : Activity() {
     private fun hint(btn: String, label: String): View {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         row.addView(TextView(this).apply {
-            text = btn; textSize = 10f; setTextColor(Theme.TEXT)
+            text = btn; textSize = if (compactUi) 9f else 10f; setTextColor(Theme.TEXT)
             setTypeface(typeface, Typeface.BOLD); gravity = Gravity.CENTER
             setShadowLayer(2f, 0f, 1f, Color.BLACK)
-            minWidth = dp(24); setPadding(dp(7), dp(2), dp(7), dp(4))
+            minWidth = dp(if (compactUi) 20 else 24)
+            setPadding(dp(if (compactUi) 5 else 7), dp(1), dp(if (compactUi) 5 else 7), dp(if (compactUi) 3 else 4))
             background = ChromeDrawable(context, if (btn.length == 1) 11f else 6f, dark = true)
         })
         row.addView(TextView(this).apply {
-            text = label; textSize = 11f; setTextColor(Theme.TEXT_DIM); setPadding(dp(5), 0, 0, 0)
+            text = label; textSize = if (compactUi) 10f else 11f; setTextColor(Theme.TEXT_DIM); setPadding(dp(4), 0, 0, 0)
         })
         return row
     }
@@ -430,7 +442,7 @@ class MainActivity : Activity() {
             else -> listOf("A" to "Open", "X" to "Options", "↓" to "All apps", "L1/R1" to "Folders")
         }
         items.forEach { (b, l) ->
-            hintBar.addView(hint(b, l), LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(8), 0, dp(8), 0) })
+            hintBar.addView(hint(b, l), LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(if (compactUi) 5 else 8), 0, dp(if (compactUi) 5 else 8), 0) })
         }
     }
 
@@ -556,7 +568,7 @@ class MainActivity : Activity() {
     }
 
     private fun makeTile(e: AppEntry, bar: Boolean = false): IconTile {
-        val t = if (bar) IconTile(this, e, (barCellDp * 0.62f).toInt(), showLabel = Prefs.bool(this, Prefs.BAR_LABELS, true))
+        val t = if (bar) IconTile(this, e, barIconDp, showLabel = Prefs.bool(this, Prefs.BAR_LABELS, true), compact = compactUi)
         else IconTile(this, e, (cellDp * 0.8f).toInt())
         t.setOnClickListener { launch(e, it) }
         t.setOnLongClickListener { showOptions(e); true }
@@ -617,7 +629,7 @@ class MainActivity : Activity() {
             }
         } else {
             val w = dp(barCellDp)
-            flat.forEach { barRow.addView(makeTile(it, bar = true), LinearLayout.LayoutParams(w, (w * 1.2f).toInt())) }
+            flat.forEach { barRow.addView(makeTile(it, bar = true), LinearLayout.LayoutParams(w, LinearLayout.LayoutParams.WRAP_CONTENT)) }
         }
         val panel = isPanel() && !searching
         emptyText.visibility = if (flat.isEmpty() && !panel) View.VISIBLE else View.GONE
