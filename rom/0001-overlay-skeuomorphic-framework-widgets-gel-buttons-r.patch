@@ -1,0 +1,436 @@
+From dc5a4137f1f78d02fc6cc1023909567bea1dcc14 Mon Sep 17 00:00:00 2001
+From: 258ryan <ryanmiranda852@gmail.com>
+Date: Sat, 14 Nov 2026 06:43:43 +0000
+Subject: [PATCH] overlay: skeuomorphic framework widgets (gel buttons,
+ recessed switch/progress/slider tracks, glass dialogs and popups, groove
+ text-field underline)
+
+Build-time resource overlay on framework-res. The drawables still follow the theme colours
+(colorButtonNormal, colorControlActivated, colorBackground).
+---
+ .../core/res/res/color/slate_switch_track.xml | 20 +++++
+ .../res/drawable/btn_default_mtrl_shape.xml   | 47 ++++++++++++
+ .../drawable/dialog_background_material.xml   | 34 +++++++++
+ .../res/res/drawable/edit_text_material.xml   | 42 +++++++++++
+ .../drawable/popup_background_material.xml    | 31 ++++++++
+ .../drawable/progress_horizontal_material.xml | 66 ++++++++++++++++
+ .../res/drawable/seekbar_track_material.xml   | 75 +++++++++++++++++++
+ .../res/drawable/switch_track_material.xml    | 42 +++++++++++
+ 8 files changed, 357 insertions(+)
+ create mode 100644 overlay/frameworks/base/core/res/res/color/slate_switch_track.xml
+ create mode 100644 overlay/frameworks/base/core/res/res/drawable/btn_default_mtrl_shape.xml
+ create mode 100644 overlay/frameworks/base/core/res/res/drawable/dialog_background_material.xml
+ create mode 100644 overlay/frameworks/base/core/res/res/drawable/edit_text_material.xml
+ create mode 100644 overlay/frameworks/base/core/res/res/drawable/popup_background_material.xml
+ create mode 100644 overlay/frameworks/base/core/res/res/drawable/progress_horizontal_material.xml
+ create mode 100644 overlay/frameworks/base/core/res/res/drawable/seekbar_track_material.xml
+ create mode 100644 overlay/frameworks/base/core/res/res/drawable/switch_track_material.xml
+
+diff --git a/overlay/frameworks/base/core/res/res/color/slate_switch_track.xml b/overlay/frameworks/base/core/res/res/color/slate_switch_track.xml
+new file mode 100644
+index 0000000..6142493
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/color/slate_switch_track.xml
+@@ -0,0 +1,20 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2026 258ryan
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<selector xmlns:android="http://schemas.android.com/apk/res/android">
++    <item android:state_enabled="false" android:color="#55505358" />
++    <item android:state_checked="true" android:color="?android:attr/colorControlActivated" />
++    <item android:color="#FF3A3D42" />
++</selector>
+diff --git a/overlay/frameworks/base/core/res/res/drawable/btn_default_mtrl_shape.xml b/overlay/frameworks/base/core/res/res/drawable/btn_default_mtrl_shape.xml
+new file mode 100644
+index 0000000..5303a3b
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/drawable/btn_default_mtrl_shape.xml
+@@ -0,0 +1,47 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2014 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<!-- Gel button: soft shadow, body tinted with the theme's button colour, glossy upper half, dark outline. -->
++<inset xmlns:android="http://schemas.android.com/apk/res/android"
++    android:insetLeft="4dp" android:insetTop="6dp" android:insetRight="4dp" android:insetBottom="6dp">
++    <layer-list>
++        <item android:top="2dp">
++            <shape android:shape="rectangle">
++                <corners android:radius="7dp" />
++                <solid android:color="#44000000" />
++            </shape>
++        </item>
++        <item android:bottom="2dp">
++            <shape android:shape="rectangle" android:tint="?android:attr/colorButtonNormal">
++                <corners android:radius="7dp" />
++                <solid android:color="@android:color/white" />
++                <padding android:left="16dp" android:top="4dp" android:right="16dp" android:bottom="4dp" />
++            </shape>
++        </item>
++        <item android:bottom="2dp">
++            <shape android:shape="rectangle">
++                <corners android:radius="7dp" />
++                <gradient android:angle="270" android:startColor="#80FFFFFF" android:centerColor="#26FFFFFF"
++                    android:endColor="#14000000" android:centerY="0.5" />
++            </shape>
++        </item>
++        <item android:bottom="2dp">
++            <shape android:shape="rectangle">
++                <corners android:radius="7dp" />
++                <stroke android:width="1dp" android:color="#88000000" />
++            </shape>
++        </item>
++    </layer-list>
++</inset>
+diff --git a/overlay/frameworks/base/core/res/res/drawable/dialog_background_material.xml b/overlay/frameworks/base/core/res/res/drawable/dialog_background_material.xml
+new file mode 100644
+index 0000000..2fbe364
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/drawable/dialog_background_material.xml
+@@ -0,0 +1,34 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2014 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<!-- Dialog: theme background with a glassy sheen on top and a bevelled edge. -->
++<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="16dp">
++    <layer-list>
++        <item>
++            <shape android:shape="rectangle">
++                <corners android:radius="10dp" />
++                <solid android:color="?android:attr/colorBackground" />
++            </shape>
++        </item>
++        <item>
++            <shape android:shape="rectangle">
++                <corners android:radius="10dp" />
++                <gradient android:angle="270" android:startColor="#33FFFFFF" android:centerColor="#08FFFFFF"
++                    android:endColor="#22000000" android:centerY="0.35" />
++                <stroke android:width="1dp" android:color="#66808890" />
++            </shape>
++        </item>
++    </layer-list>
++</inset>
+diff --git a/overlay/frameworks/base/core/res/res/drawable/edit_text_material.xml b/overlay/frameworks/base/core/res/res/drawable/edit_text_material.xml
+new file mode 100644
+index 0000000..589127d
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/drawable/edit_text_material.xml
+@@ -0,0 +1,42 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2014 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<!-- Text field underline as a pressed-in groove: dark line with a light line below it; blue when focused. -->
++<inset xmlns:android="http://schemas.android.com/apk/res/android"
++    android:insetLeft="4dp" android:insetRight="4dp" android:insetTop="4dp" android:insetBottom="8dp">
++    <selector>
++        <item android:state_enabled="false">
++            <layer-list>
++                <item android:gravity="bottom" android:height="1dp"><shape><solid android:color="#33808890" /></shape></item>
++            </layer-list>
++        </item>
++        <item android:state_pressed="false" android:state_focused="false">
++            <layer-list>
++                <item android:gravity="bottom" android:height="1dp"><shape><solid android:color="#44FFFFFF" /></shape></item>
++                <item android:gravity="bottom" android:height="1dp" android:bottom="1dp"><shape><solid android:color="#99000000" /></shape></item>
++            </layer-list>
++        </item>
++        <item>
++            <layer-list>
++                <item android:gravity="bottom" android:height="3dp">
++                    <shape android:shape="rectangle" android:tint="?android:attr/colorControlActivated">
++                        <corners android:radius="1dp" />
++                        <solid android:color="@android:color/white" />
++                    </shape>
++                </item>
++            </layer-list>
++        </item>
++    </selector>
++</inset>
+diff --git a/overlay/frameworks/base/core/res/res/drawable/popup_background_material.xml b/overlay/frameworks/base/core/res/res/drawable/popup_background_material.xml
+new file mode 100644
+index 0000000..83a64b6
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/drawable/popup_background_material.xml
+@@ -0,0 +1,31 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2014 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
++    <item>
++        <shape android:shape="rectangle">
++            <corners android:radius="6dp" />
++            <solid android:color="?android:attr/colorBackground" />
++        </shape>
++    </item>
++    <item>
++        <shape android:shape="rectangle">
++            <corners android:radius="6dp" />
++            <gradient android:angle="270" android:startColor="#33FFFFFF" android:centerColor="#08FFFFFF"
++                android:endColor="#22000000" android:centerY="0.3" />
++            <stroke android:width="1dp" android:color="#66808890" />
++        </shape>
++    </item>
++</layer-list>
+diff --git a/overlay/frameworks/base/core/res/res/drawable/progress_horizontal_material.xml b/overlay/frameworks/base/core/res/res/drawable/progress_horizontal_material.xml
+new file mode 100644
+index 0000000..9be8ac9
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/drawable/progress_horizontal_material.xml
+@@ -0,0 +1,66 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2014 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<!-- Progress bar: recessed track, glossy gel fill. -->
++<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
++    <item android:id="@android:id/background" android:gravity="center_vertical|fill_horizontal">
++        <layer-list>
++            <item>
++                <shape android:shape="rectangle">
++                    <corners android:radius="3dp" />
++                    <solid android:color="#40FFFFFF" />
++                    <size android:height="7dp" />
++                </shape>
++            </item>
++            <item android:bottom="1dp">
++                <shape android:shape="rectangle">
++                    <corners android:radius="3dp" />
++                    <gradient android:angle="270" android:startColor="#FF050506" android:endColor="#FF2A2C30" />
++                    <stroke android:width="1dp" android:color="#88000000" />
++                </shape>
++            </item>
++        </layer-list>
++    </item>
++    <item android:id="@android:id/secondaryProgress" android:gravity="center_vertical|fill_horizontal">
++        <scale android:scaleWidth="100%">
++            <shape android:shape="rectangle">
++                <corners android:radius="3dp" />
++                <solid android:color="#44FFFFFF" />
++                <size android:height="7dp" />
++            </shape>
++        </scale>
++    </item>
++    <item android:id="@android:id/progress" android:gravity="center_vertical|fill_horizontal">
++        <scale android:scaleWidth="100%">
++            <layer-list>
++                <item>
++                    <shape android:shape="rectangle" android:tint="?android:attr/colorControlActivated">
++                        <corners android:radius="3dp" />
++                        <solid android:color="@android:color/white" />
++                        <size android:height="7dp" />
++                    </shape>
++                </item>
++                <item>
++                    <shape android:shape="rectangle">
++                        <corners android:radius="3dp" />
++                        <gradient android:angle="270" android:startColor="#99FFFFFF" android:centerColor="#22FFFFFF"
++                            android:endColor="#22000000" android:centerY="0.5" />
++                        <stroke android:width="1dp" android:color="#55000000" />
++                    </shape>
++                </item>
++            </layer-list>
++        </scale>
++    </item>
++</layer-list>
+diff --git a/overlay/frameworks/base/core/res/res/drawable/seekbar_track_material.xml b/overlay/frameworks/base/core/res/res/drawable/seekbar_track_material.xml
+new file mode 100644
+index 0000000..ebd8a5a
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/drawable/seekbar_track_material.xml
+@@ -0,0 +1,75 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2014 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<!-- Slider track: same recessed groove and gel fill as the progress bar. -->
++<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
++    <item android:id="@android:id/background" android:gravity="center_vertical|fill_horizontal">
++        <layer-list>
++            <item>
++                <shape android:shape="rectangle">
++                    <corners android:radius="3dp" />
++                    <solid android:color="#40FFFFFF" />
++                    <size android:height="6dp" />
++                </shape>
++            </item>
++            <item android:bottom="1dp">
++                <shape android:shape="rectangle">
++                    <corners android:radius="3dp" />
++                    <gradient android:angle="270" android:startColor="#FF050506" android:endColor="#FF2A2C30" />
++                    <stroke android:width="1dp" android:color="#88000000" />
++                </shape>
++            </item>
++        </layer-list>
++    </item>
++    <item android:id="@android:id/secondaryProgress" android:gravity="center_vertical|fill_horizontal">
++        <scale android:scaleWidth="100%">
++            <selector>
++                <item android:state_enabled="false" android:drawable="@android:color/transparent" />
++                <item>
++                    <shape android:shape="rectangle">
++                        <corners android:radius="3dp" />
++                        <solid android:color="#44FFFFFF" />
++                        <size android:height="6dp" />
++                    </shape>
++                </item>
++            </selector>
++        </scale>
++    </item>
++    <item android:id="@android:id/progress" android:gravity="center_vertical|fill_horizontal">
++        <scale android:scaleWidth="100%">
++            <selector>
++                <item android:state_enabled="false" android:drawable="@android:color/transparent" />
++                <item>
++                    <layer-list>
++                        <item>
++                            <shape android:shape="rectangle" android:tint="?android:attr/colorControlActivated">
++                                <corners android:radius="3dp" />
++                                <solid android:color="@android:color/white" />
++                                <size android:height="6dp" />
++                            </shape>
++                        </item>
++                        <item>
++                            <shape android:shape="rectangle">
++                                <corners android:radius="3dp" />
++                                <gradient android:angle="270" android:startColor="#99FFFFFF" android:centerColor="#22FFFFFF"
++                                    android:endColor="#22000000" android:centerY="0.5" />
++                            </shape>
++                        </item>
++                    </layer-list>
++                </item>
++            </selector>
++        </scale>
++    </item>
++</layer-list>
+diff --git a/overlay/frameworks/base/core/res/res/drawable/switch_track_material.xml b/overlay/frameworks/base/core/res/res/drawable/switch_track_material.xml
+new file mode 100644
+index 0000000..0dcfd67
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/drawable/switch_track_material.xml
+@@ -0,0 +1,42 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2015 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<!-- Recessed groove: coloured fill, dark inner shadow along the top, light lip along the bottom. -->
++<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
++    <item android:gravity="center_vertical|fill_horizontal" android:start="4dp" android:end="4dp">
++        <layer-list>
++            <item>
++                <shape android:shape="rectangle">
++                    <corners android:radius="7dp" />
++                    <solid android:color="#40FFFFFF" />
++                    <size android:height="15dp" />
++                </shape>
++            </item>
++            <item android:bottom="1dp">
++                <shape android:shape="rectangle" android:tint="@color/slate_switch_track">
++                    <corners android:radius="7dp" />
++                    <solid android:color="@android:color/white" />
++                </shape>
++            </item>
++            <item android:bottom="1dp">
++                <shape android:shape="rectangle">
++                    <corners android:radius="7dp" />
++                    <gradient android:angle="270" android:startColor="#88000000" android:endColor="#00000000" />
++                    <stroke android:width="1dp" android:color="#66000000" />
++                </shape>
++            </item>
++        </layer-list>
++    </item>
++</layer-list>
+-- 
+2.43.0
+

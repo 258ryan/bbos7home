@@ -1,5 +1,7 @@
 # Slate Skin (Magisk module)
 
+> **No root?** The Magisk module needs root. If your build has none, use the build-time version in [`../rom/`](../rom/README.md): a patch for the device tree that bakes the same widgets into the ROM.
+
 Skeuomorphic system widgets for **LineageOS 18.1 (Android 11)**, as runtime resource overlays.
 The ROM's framework (`andr36oid/android_frameworks_base`, branch `lineage-18.1`) declares no `<overlayable>` restrictions,
 so every framework drawable can be replaced.
