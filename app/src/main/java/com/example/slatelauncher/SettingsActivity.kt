@@ -201,19 +201,9 @@ class SettingsActivity : Activity() {
         }
         root.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val hints = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
-            background = Materials.dimLeather(this@SettingsActivity, 250)
-            setPadding(dp(6), dp(6), dp(6), dp(6))
-        }
-        listOf("A" to "Select", "B" to "Back", "L1/R1" to "Category", "◀ ▶" to "Adjust").forEach { (b, l) ->
-            hints.addView(TextView(this).apply {
-                text = b; textSize = 10f; setTextColor(Theme.TEXT); setTypeface(typeface, Typeface.BOLD); gravity = Gravity.CENTER
-                setShadowLayer(2f, 0f, 1f, Color.BLACK); minWidth = dp(24); setPadding(dp(7), dp(2), dp(7), dp(4))
-                background = ChromeDrawable(this@SettingsActivity, if (b.length == 1) 11f else 6f, dark = true)
-            }, LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(10), 0, dp(4), 0) })
-            hints.addView(TextView(this).apply { text = l; textSize = 11f; setTextColor(Theme.TEXT_DIM) })
-        }
+        val hints = LinearLayout(this)
+        styleHintBar(this, hints)
+        fillHints(this, hints, listOf("A" to "Select", "B" to "Back", "L1/R1" to "Category", "◀ ▶" to "Adjust"))
         root.addView(hints, LinearLayout.LayoutParams(-1, -2))
         return root
     }

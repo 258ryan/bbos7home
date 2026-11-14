@@ -1,6 +1,10 @@
 package com.example.slatelauncher
 
 import android.content.Context
+import android.graphics.Typeface
+import android.view.Gravity
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
@@ -71,5 +75,28 @@ fun navRowBackground(ctx: Context): Drawable {
         addState(intArrayOf(android.R.attr.state_focused), gel)
         addState(intArrayOf(android.R.attr.state_selected), dim)
         addState(intArrayOf(), ColorDrawable(Color.TRANSPARENT))
+    }
+}
+
+/**
+ * The button-hint bar (A Open, X Options, ...). The home screen and the settings both build theirs with these two
+ * functions, so the keycaps, text and spacing are always identical.
+ */
+fun styleHintBar(ctx: Context, bar: LinearLayout) {
+    bar.orientation = LinearLayout.HORIZONTAL
+    bar.gravity = Gravity.CENTER
+    bar.background = Materials.dimLeather(ctx, 250)
+    bar.setPadding(ctx.dp(6), ctx.dp(6), ctx.dp(6), ctx.dp(6))
+}
+
+fun fillHints(ctx: Context, bar: LinearLayout, items: List<Pair<String, String>>) {
+    bar.removeAllViews()
+    items.forEach { (b, l) ->
+        bar.addView(TextView(ctx).apply {
+            text = b; textSize = 10f; setTextColor(Theme.TEXT); setTypeface(typeface, Typeface.BOLD); gravity = Gravity.CENTER
+            setShadowLayer(2f, 0f, 1f, Color.BLACK); minWidth = ctx.dp(24); setPadding(ctx.dp(7), ctx.dp(2), ctx.dp(7), ctx.dp(4))
+            background = ChromeDrawable(ctx, if (b.length == 1) 11f else 6f, dark = true)
+        }, LinearLayout.LayoutParams(-2, -2).apply { setMargins(ctx.dp(10), 0, ctx.dp(4), 0) })
+        bar.addView(TextView(ctx).apply { text = l; textSize = 11f; setTextColor(Theme.TEXT_DIM) })
     }
 }
