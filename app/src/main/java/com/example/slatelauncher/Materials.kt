@@ -110,8 +110,9 @@ object Materials {
         }
     }
 
-    private fun tiled(ctx: Context, bmp: Bitmap): BitmapDrawable =
-        BitmapDrawable(ctx.resources, bmp).apply { setTileModeXY(Shader.TileMode.REPEAT, Shader.TileMode.REPEAT) }
+    /** Tiles [bmp] over whatever size the view has. No intrinsic size, so it never forces a view taller. */
+    @Suppress("UNUSED_PARAMETER")
+    private fun tiled(ctx: Context, bmp: Bitmap): Drawable = TileDrawable(bmp)
 
     private fun shade(top: Int, bottom: Int) =
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(top, bottom))
@@ -148,6 +149,17 @@ object Materials {
         }
         return LayerDrawable(arrayOf(lip, well)).also { it.setLayerInset(1, 0, 0, 0, maxOf(1, ctx.dp(1))) }
     }
+}
+
+/**
+ * Repeats a bitmap across the drawable's bounds. It deliberately reports no intrinsic size: a BitmapDrawable would make every
+ * view that uses it as a background at least as tall as the bitmap (64 / 96 px), which is what blew up the bars.
+ */
+class TileDrawable(bmp: Bitmap) : MatDrawable() {
+    init { p.shader = android.graphics.BitmapShader(bmp, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT) }
+    override fun draw(c: Canvas) { c.drawRect(bounds, p) }
+    override fun getIntrinsicWidth() = -1
+    override fun getIntrinsicHeight() = -1
 }
 
 abstract class MatDrawable : Drawable() {
