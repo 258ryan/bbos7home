@@ -68,7 +68,7 @@ class TileGrid(ctx: Context) : ViewGroup(ctx) {
 }
 
 /** One app icon, optionally with its name underneath. Rounded blue rectangle when focused. */
-class IconTile(ctx: Context, val entry: AppEntry, iconDp: Int, showLabel: Boolean = false) : LinearLayout(ctx) {
+class IconTile(ctx: Context, val entry: AppEntry, iconDp: Int, showLabel: Boolean = false, compact: Boolean = false) : LinearLayout(ctx) {
     init {
         orientation = VERTICAL
         gravity = Gravity.CENTER
@@ -76,6 +76,8 @@ class IconTile(ctx: Context, val entry: AppEntry, iconDp: Int, showLabel: Boolea
         isClickable = true
         background = focusGlow(ctx, 8, 2)
         contentDescription = entry.label
+        // Bar tiles wrap their content (icon + name) instead of floating in a taller cell.
+        if (showLabel) setPadding(0, ctx.dp(4), 0, ctx.dp(3))
         addView(ImageView(ctx).apply {
             setImageDrawable(entry.icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
@@ -83,20 +85,20 @@ class IconTile(ctx: Context, val entry: AppEntry, iconDp: Int, showLabel: Boolea
         if (showLabel) {
             addView(TextView(ctx).apply {
                 text = entry.label
-                textSize = 12f
+                textSize = if (compact) 10.5f else 12f
                 setTextColor(Theme.TEXT)
                 setShadowLayer(3f, 0f, 1f, 0xFF000000.toInt())
                 gravity = Gravity.CENTER
-                maxLines = 2
+                maxLines = if (compact) 1 else 2
                 ellipsize = TextUtils.TruncateAt.END
-                setPadding(ctx.dp(2), ctx.dp(2), ctx.dp(2), 0)
+                setPadding(ctx.dp(2), ctx.dp(1), ctx.dp(2), 0)
             }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         }
     }
 }
 
 /** Banner indicator: number first, then the icon (like OS 7). Empty count = icon only. */
-class CounterChip(ctx: Context, icon: Drawable?, val kind: String) : LinearLayout(ctx) {
+class CounterChip(ctx: Context, icon: Drawable?, val kind: String, compact: Boolean = false) : LinearLayout(ctx) {
     private val count = TextView(ctx)
 
     init {
@@ -105,9 +107,9 @@ class CounterChip(ctx: Context, icon: Drawable?, val kind: String) : LinearLayou
         isFocusable = true
         isClickable = true
         background = focusGlow(ctx, 8, 1)
-        setPadding(ctx.dp(8), ctx.dp(3), ctx.dp(8), ctx.dp(3))
+        if (compact) setPadding(ctx.dp(6), ctx.dp(1), ctx.dp(6), ctx.dp(1)) else setPadding(ctx.dp(8), ctx.dp(3), ctx.dp(8), ctx.dp(3))
         count.apply {
-            textSize = 20f
+            textSize = if (compact) 16f else 20f
             setTextColor(Theme.TEXT)
             setPadding(0, 0, ctx.dp(4), 0)
             visibility = GONE
@@ -116,7 +118,7 @@ class CounterChip(ctx: Context, icon: Drawable?, val kind: String) : LinearLayou
         addView(ImageView(ctx).apply {
             if (icon != null) setImageDrawable(icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
-        }, LayoutParams(ctx.dp(28), ctx.dp(28)))
+        }, LayoutParams(ctx.dp(if (compact) 22 else 28), ctx.dp(if (compact) 22 else 28)))
     }
 
     fun setCount(text: String) {
