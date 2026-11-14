@@ -366,17 +366,12 @@ class MainActivity : Activity() {
         root.addView(homeScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         // Button hints
-        hintBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            background = Materials.dimLeather(context, 250)
-            setPadding(dp(6), dp(if (compactUi) 2 else 6), dp(6), dp(if (compactUi) 2 else 6))
-        }
+        hintBar = LinearLayout(this)
+        styleHintBar(this, hintBar)
         root.addView(hintBar, LinearLayout.LayoutParams(-1, -2))
         root.setOnApplyWindowInsetsListener { _, ins ->
             banner.setPadding(0, ins.systemWindowInsetTop, 0, 0)
-            val v = if (compactUi) 2 else 6
-            hintBar.setPadding(dp(6), dp(v), dp(6), dp(v) + ins.systemWindowInsetBottom)
+            hintBar.setPadding(dp(6), dp(6), dp(6), dp(6) + ins.systemWindowInsetBottom)
             ins
         }
         return root
@@ -414,24 +409,7 @@ class MainActivity : Activity() {
         updateHints()
     }
 
-    private fun hint(btn: String, label: String): View {
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        row.addView(TextView(this).apply {
-            text = btn; textSize = if (compactUi) 9f else 10f; setTextColor(Theme.TEXT)
-            setTypeface(typeface, Typeface.BOLD); gravity = Gravity.CENTER
-            setShadowLayer(2f, 0f, 1f, Color.BLACK)
-            minWidth = dp(if (compactUi) 20 else 24)
-            setPadding(dp(if (compactUi) 5 else 7), dp(1), dp(if (compactUi) 5 else 7), dp(if (compactUi) 3 else 4))
-            background = ChromeDrawable(context, if (btn.length == 1) 11f else 6f, dark = true)
-        })
-        row.addView(TextView(this).apply {
-            text = label; textSize = if (compactUi) 10f else 11f; setTextColor(Theme.TEXT_DIM); setPadding(dp(4), 0, 0, 0)
-        })
-        return row
-    }
-
     private fun updateHints() {
-        hintBar.removeAllViews()
         val items = when {
             searching -> listOf("A" to "Go", "B" to "Cancel")
             category == Category.GAMES -> listOf("A" to "Play", "X" to "Options", "B" to "Back", "L1/R1" to "Folders")
@@ -441,9 +419,7 @@ class MainActivity : Activity() {
             expanded -> listOf("A" to "Open", "X" to "Options", "B" to "Collapse", "L1/R1" to "Folders")
             else -> listOf("A" to "Open", "X" to "Options", "↓" to "All apps", "L1/R1" to "Folders")
         }
-        items.forEach { (b, l) ->
-            hintBar.addView(hint(b, l), LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(if (compactUi) 5 else 8), 0, dp(if (compactUi) 5 else 8), 0) })
-        }
+        fillHints(this, hintBar, items)
     }
 
     /** Folders shown in the strip (the user can hide any except "All"). */
