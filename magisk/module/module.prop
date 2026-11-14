@@ -1,0 +1,6 @@
+id=slate-skin
+name=Slate Skin
+version=v0.1
+versionCode=1
+author=258ryan
+description=Skeuomorphic (BB OS 7 / iOS 6 style) system widgets for LineageOS 18.1: gel buttons, glossy switches and progress bars, glass dialogs. Disables itself after 3 failed boots.

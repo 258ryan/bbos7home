@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Text field underline as a pressed-in groove: dark line with a light line below it; blue when focused. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="4dp" android:insetRight="4dp" android:insetTop="4dp" android:insetBottom="8dp">
+    <selector>
+        <item android:state_enabled="false">
+            <layer-list>
+                <item android:gravity="bottom" android:height="1dp"><shape><solid android:color="#33808890" /></shape></item>
+            </layer-list>
+        </item>
+        <item android:state_pressed="false" android:state_focused="false">
+            <layer-list>
+                <item android:gravity="bottom" android:height="1dp"><shape><solid android:color="#44FFFFFF" /></shape></item>
+                <item android:gravity="bottom" android:height="1dp" android:bottom="1dp"><shape><solid android:color="#99000000" /></shape></item>
+            </layer-list>
+        </item>
+        <item>
+            <layer-list>
+                <item android:gravity="bottom" android:height="3dp">
+                    <shape android:shape="rectangle" android:tint="?android:attr/colorControlActivated">
+                        <corners android:radius="1dp" />
+                        <solid android:color="@android:color/white" />
+                    </shape>
+                </item>
+            </layer-list>
+        </item>
+    </selector>
+</inset>

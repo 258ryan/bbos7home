@@ -1,0 +1,20 @@
+name: Magisk module
+on:
+  push:
+    paths: ['magisk/**', '.github/workflows/magisk.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build overlay APKs and zip the module
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          PL=$(ls -d "$ANDROID_HOME"/platforms/android-* | sort -V | tail -1)
+          echo "build-tools: $BT  platform: $PL"
+          AAPT2="$BT/aapt2" ANDROID_JAR="$PL/android.jar" ./magisk/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slate-skin-magisk
+          path: magisk/out/*.zip
